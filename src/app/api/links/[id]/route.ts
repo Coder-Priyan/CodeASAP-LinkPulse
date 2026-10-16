@@ -23,6 +23,8 @@ export async function PATCH(
       password: body.password,
       removePassword: body.removePassword,
       disabledReason: body.disabledReason,
+      campaignId: body.campaignId,
+      tagIds: body.tagIds,
     });
 
     return NextResponse.json({ success: true, link: updated });

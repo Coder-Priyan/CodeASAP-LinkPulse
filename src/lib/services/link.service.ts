@@ -641,25 +641,42 @@ export async function updateLinkRules(
     if (input.campaignId === null || input.campaignId === "") {
       updateData.campaign = { disconnect: true };
     } else {
-      // Validate campaign ownership
+      // Validate campaign ownership (must belong to the link owner)
       const camp = await db.campaign.findUnique({
         where: { id: input.campaignId },
         select: { id: true, userId: true },
       });
-      if (camp && (userRole === Role.ADMIN || camp.userId === userId)) {
-        updateData.campaign = { connect: { id: input.campaignId } };
+      if (!camp || camp.userId !== link.userId) {
+        throw new LinkServiceError("Campaign not found or access denied.", "FORBIDDEN", 403);
       }
+      updateData.campaign = { connect: { id: input.campaignId } };
     }
   }
 
   // Handle Tag updates
   if (input.tagIds !== undefined) {
-    // Delete existing link tags and re-insert
-    await db.linkTag.deleteMany({ where: { linkId } });
     if (input.tagIds && input.tagIds.length > 0) {
+      const uniqueTagIds = Array.from(new Set(input.tagIds));
+      // Validate that all tags exist and belong to the link owner
+      const validTags = await db.tag.findMany({
+        where: {
+          id: { in: uniqueTagIds },
+          userId: link.userId,
+        },
+        select: { id: true },
+      });
+
+      if (validTags.length !== uniqueTagIds.length) {
+        throw new LinkServiceError("One or more tags not found or access denied.", "FORBIDDEN", 403);
+      }
+
+      await db.linkTag.deleteMany({ where: { linkId } });
       updateData.tags = {
-        create: input.tagIds.map((tagId) => ({ tagId })),
+        create: uniqueTagIds.map((tagId) => ({ tagId })),
       };
+    } else {
+      // Explicitly cleared
+      await db.linkTag.deleteMany({ where: { linkId } });
     }
   }
 

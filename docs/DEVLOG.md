@@ -1,5 +1,13 @@
 # LinkPulse Devlog
 
+### 2026-10-16 — Documentation: README Rewrite
+- **What**: Replaced the old README with a plain-English document covering features, redirect flow, architecture, data model, env vars, seed data, tests, and API routes.
+- **Why**: The old README used marketing language and some details were inaccurate or unverified (seed link codes and click counts had drifted from the actual seed script). Every statement in the new README was checked against the code before writing.
+- **How**: Read schema.prisma, all route handlers, service files, seed.ts, .env.example, package.json, and vitest output; cross-checked every claim; ran `npm run test` to confirm the 27-test result.
+- **Requirement**: Document the project accurately so a reviewer can understand and run it without guessing.
+- **Next**: Add real screenshots to `docs/screenshots/` and fill in the deployment section once deployed.
+
+
 ### 2026-10-16 — Testing: Core Business Logic Test Suite
 - **What**: Built a focused 27-test automated suite using Vitest covering rule ordering, click limit concurrency, bot exclusion, URL/alias validation, unique visitors, RBAC, rate limits, analytics, and campaign deletion cascades.
 - **Why**: Chose Vitest with isolated per-test database fixtures to test actual PostgreSQL logic directly without mocking out race conditions or atomic queries.
