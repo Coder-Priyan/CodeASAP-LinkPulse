@@ -1,69 +1,8 @@
 # LinkPulse
 
-> A URL shortener with real-time rule evaluation, atomic click limits, privacy-safe analytics, and campaign organization.
-
-[![Next.js](https://img.shields.io/badge/Next.js-15.2.1-black?logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.2-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Prisma](https://img.shields.io/badge/Prisma-6.4.1-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
-[![Vitest](https://img.shields.io/badge/Vitest-5.0.5-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+A URL shortener with analytics. Shorten a URL, set rules on it — expiry date, click limit, password — group links into campaigns, and see click data in a live dashboard. Each rule is enforced on every visit, not just at creation time.
 
 **Team:** Code ASAP — Innovista 2026 Hackathon, Round 2: Implementation
-
----
-
-## Highlights
-
-- **Dynamic redirect rules:** Evaluates disabled status, expiration timestamp, click limit, and password challenges in deliberate sequence on every visit.
-- **Atomic click-limit enforcement:** Concurrency-safe atomic SQL counter (`UPDATE ... WHERE "clicksCount" < $limit`) ensures high-concurrency requests never overshoot the limit.
-- **Bot exclusion:** Crawlers, preview fetchers, and CLI scrapers are detected and redirected without incrementing click limits or generating ClickEvents.
-- **Privacy-safe visitor telemetry:** Unique visitors are identified with a salted SHA-256 hash of IP and User-Agent; raw IP addresses are never persisted.
-- **Campaigns and tags:** Group links into campaigns and color-coded tags; deleting a campaign safely unlinks links while preserving them and their click histories.
-- **Role-based isolation:** Two-tier access (`USER` and `ADMIN`) ensuring multi-tenant data privacy with administrative oversight.
-
----
-
-## Table of Contents
-
-- [Highlights](#highlights)
-- [Quick Start](#quick-start)
-- [Features](#features)
-- [Not Built Yet](#not-built-yet)
-- [How It Works: Redirect Flow](#how-it-works-redirect-flow)
-- [Architecture](#architecture)
-- [Data Model](#data-model)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Seed Data](#seed-data)
-- [Tests](#tests)
-- [API Overview](#api-overview)
-- [Deployment](#deployment)
-- [Project Log](#project-log)
-
----
-
-## Quick Start
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/Coder-Priyan/LinkPulse.git
-cd LinkPulse
-
-# 2. Install dependencies
-npm install
-
-# 3. Configure environment variables
-cp .env.example .env
-# Set DATABASE_URL and DIRECT_URL to your PostgreSQL connection string
-
-# 4. Push schema to the database
-npx prisma db push
-
-# 5. Start the development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to view the application. For detailed setup and sample seed accounts, see [Getting Started](#getting-started) and [Seed Data](#seed-data).
 
 ---
 
@@ -113,7 +52,7 @@ Open [http://localhost:3000](http://localhost:3000) to view the application. For
 
 ---
 
-## Not Built Yet
+## Not built yet
 
 - QR code generation with scan tracking
 - CSV bulk link import
@@ -126,36 +65,34 @@ Open [http://localhost:3000](http://localhost:3000) to view the application. For
 
 ---
 
-## How It Works: Redirect Flow
+## How it works: redirect flow
 
-```mermaid
-flowchart TD
-    Start["GET /{code}"] --> Fetch["Fetch link by code"]
-    Fetch -->|Not found| R_NotFound["HTTP 307 &rarr; /link-status?status=NOT_FOUND"]
-    Fetch -->|Found| CheckDisabled{"1. isActive === false?"}
-
-    CheckDisabled -->|Yes| R_Disabled["HTTP 307 &rarr; /link-status?status=DISABLED"]
-    CheckDisabled -->|No| CheckExpired{"2. expiresAt &le; now?"}
-
-    CheckExpired -->|Yes| R_Expired["HTTP 307 &rarr; /link-status?status=EXPIRED"]
-    CheckExpired -->|No| CheckLimit{"3. clicksCount &ge; clickLimit?"}
-
-    CheckLimit -->|Yes| R_Limit["HTTP 307 &rarr; /link-status?status=LIMIT_REACHED"]
-    CheckLimit -->|No| CheckPassword{"4. passwordHash set?"}
-
-    CheckPassword -->|Yes| R_Password["HTTP 307 &rarr; /p/{code} (password prompt)"]
-    CheckPassword -->|No| CheckBot{"Bot detected? (isBot)"}
-
-    CheckBot -->|Yes (bot/crawler)| RedirectOnly["HTTP 307 to destination (no event, counter unchanged)"]
-    CheckBot -->|No (human)| AtomicInc["Atomic counter increment<br/>UPDATE ... WHERE clicksCount < limit"]
-
-    AtomicInc -->|0 rows updated (limit full)| R_LimitRace["HTTP 307 &rarr; /link-status?status=LIMIT_REACHED"]
-    AtomicInc -->|Success| LogAfter["Schedule click logging via Next.js after()"]
-
-    LogAfter --> Redirect["HTTP 307 to destinationUrl<br/>Cache-Control: private, no-cache, no-store, must-revalidate"]
+```
+GET /{code}
+│
+├─ Link not found?
+│   └─ → /link-status?status=NOT_FOUND
+│
+├─ Evaluate rules (link.service.ts: evaluateLinkRules)
+│   ├─ 1. isActive === false         → /link-status?status=DISABLED
+│   ├─ 2. expiresAt ≤ now            → /link-status?status=EXPIRED
+│   ├─ 3. clicksCount ≥ clickLimit   → /link-status?status=LIMIT_REACHED
+│   └─ 4. passwordHash set           → /p/{code}  (password prompt page)
+│
+├─ Bot? (user-agent.ts: isBot)
+│   └─ yes → HTTP 307, no counter increment, no ClickEvent written
+│
+├─ Atomic increment (Prisma $executeRaw)
+│   └─ UPDATE "Link" SET "clicksCount" = "clicksCount" + 1
+│      WHERE "id" = $id AND "clicksCount" < $limit
+│      → if 0 rows updated, a concurrent visit filled the last slot → LIMIT_REACHED
+│
+├─ Schedule click logging via after() — runs after response is sent
+│
+└─ HTTP 307 + Cache-Control: private, no-cache, no-store, must-revalidate
 ```
 
-HTTP 307 (temporary redirect) with `no-store` ensures browsers and CDN caches never cache the response, so rule changes take effect immediately on the next visit.
+307 (temporary redirect) with `no-store` ensures browsers and CDN caches never cache the response, so rule changes take effect immediately on the next visit.
 
 ---
 
@@ -193,7 +130,7 @@ LinkPulse/
 
 ---
 
-## Data Model
+## Data model
 
 ```
 User ──< Link ──< ClickEvent
@@ -214,7 +151,7 @@ User ──< Link ──< ClickEvent
 
 ---
 
-## Tech Stack
+## Tech stack
 
 | Package | Version (package.json) |
 |---|---|
@@ -231,7 +168,7 @@ User ──< Link ──< ClickEvent
 
 ---
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
@@ -258,9 +195,6 @@ copy .env.example .env
 cp .env.example .env
 ```
 
-<details>
-<summary><strong>Environment variables reference</strong></summary>
-
 | Variable | Purpose | Required |
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection string (main connection or pooled URL) | Yes |
@@ -269,8 +203,6 @@ cp .env.example .env
 | `JWT_SECRET` | Signs session tokens; use a random string of at least 32 characters in production | Yes |
 | `VISITOR_SALT` | Salt for visitor SHA-256 hashes; must be different from `JWT_SECRET` | Yes |
 | `NODE_ENV` | Set to `production` for deployed builds | No |
-
-</details>
 
 ### Database setup
 
@@ -297,7 +229,7 @@ npm run start
 
 ---
 
-## Seed Data
+## Seed data
 
 > **Warning: the seed script deletes all existing rows in every table** before inserting sample data. It wipes `PasswordAttempt`, `ClickEvent`, `LinkTag`, `Tag`, `Link`, `Campaign`, and `User` unconditionally. Do not run it against a database that holds real data.
 >
@@ -306,11 +238,6 @@ npm run start
 ```bash
 npm run prisma:seed
 ```
-
-The script creates 3 campaigns, 5 tags, and 227 click events distributed across the past 12 days with device, browser, OS, and referrer variety.
-
-<details>
-<summary><strong>Seed data details (accounts and sample links)</strong></summary>
 
 **Demo accounts** (all use password `Password123!`):
 
@@ -333,7 +260,7 @@ The script creates 3 campaigns, 5 tags, and 227 click events distributed across 
 | `/flagged-offer` | Disabled | Owned by alex; disabled with a reason |
 | `/portfolio` | Active | Owned by sarah@creatorhub.com |
 
-</details>
+The script also creates 3 campaigns, 5 tags, and 227 click events distributed across the past 12 days with device, browser, OS, and referrer variety.
 
 ---
 
@@ -361,12 +288,9 @@ Verified result: **10 test files, 32 tests, all passed** (24.6 s).
 
 ---
 
-## API Overview
+## API overview
 
 All routes require a valid session cookie (set at login) except register, login, and password verify (`/api/links/verify`). Users can only act on their own resources.
-
-<details>
-<summary><strong>API route reference</strong></summary>
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
@@ -387,8 +311,6 @@ All routes require a valid session cookie (set at login) except register, login,
 | `DELETE` | `/api/tags/[id]` | Owner or ADMIN | Delete a tag |
 | `GET` | `/api/analytics` | Authenticated | Analytics report; query params: `period` (7d/30d/all), `campaignId`, `scope` (me/all) |
 
-</details>
-
 The redirect itself is handled by `GET /[code]` (a Next.js route handler, not under `/api`).
 
 ---
@@ -401,6 +323,6 @@ Deployment steps will be added here once the project is deployed.
 
 ---
 
-## Project Log
+## Project log
 
 See [docs/DEVLOG.md](docs/DEVLOG.md) for a short entry per milestone.
