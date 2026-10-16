@@ -1,0 +1,138 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String?
+  passwordHash String
+  role         Role       @default(USER)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  links        Link[]
+  campaigns    Campaign[]
+  tags         Tag[]
+
+  @@index([email])
+}
+
+model Link {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  destinationUrl String
+  title          String?
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  isActive       Boolean      @default(true)
+  disabledAt     DateTime?
+  disabledReason String?
+
+  // Future milestone provisions
+  expiresAt      DateTime?
+  clickLimit     Int?
+  passwordHash   String?
+  campaignId     String?
+  campaign       Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  qrCodeData     String?
+
+  clicksCount    Int          @default(0)
+
+  passwordAttempts PasswordAttempt[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  clicks         ClickEvent[]
+  tags           LinkTag[]
+
+  @@index([code])
+  @@index([userId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([campaignId])
+}
+
+model ClickEvent {
+  id          String   @id @default(cuid())
+  linkId      String
+  link        Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  timestamp   DateTime @default(now())
+
+  referrer    String?
+  device      String?  // desktop, mobile, tablet, etc.
+  browser     String?  // Chrome, Safari, Firefox, Edge, etc.
+  os          String?  // Windows, macOS, iOS, Android, Linux, etc.
+  country     String?  // Geo IP code (e.g. US, IN, GB)
+  userAgent   String?  // Sanitized UA string
+  visitorHash String?  // Salted SHA-256 hash of IP + User-Agent (privacy-safe)
+
+  @@index([linkId])
+  @@index([timestamp])
+  @@index([linkId, visitorHash])
+  @@index([linkId, timestamp])
+  @@index([device])
+  @@index([browser])
+}
+
+model PasswordAttempt {
+  id        String   @id @default(cuid())
+  linkId    String
+  link      Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  ipHash    String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([linkId, ipHash, createdAt])
+}
+
+// Campaign groupings
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links       Link[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// Tags
+model Tag {
+  id        String    @id @default(cuid())
+  name      String
+  color     String?
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links     LinkTag[]
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model LinkTag {
+  linkId String
+  tagId  String
+  link   Link   @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([linkId, tagId])
+}

@@ -1,0 +1,25 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, AuthError } from "@/lib/auth/guard";
+import { deleteCampaign, CampaignServiceError } from "@/lib/services/campaign.service";
+
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth();
+    const { id } = await context.params;
+
+    await deleteCampaign(user.userId, user.role, id);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof CampaignServiceError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error("[API Campaigns DELETE] Error:", error);
+    return NextResponse.json({ error: "Failed to delete campaign." }, { status: 500 });
+  }
+}
