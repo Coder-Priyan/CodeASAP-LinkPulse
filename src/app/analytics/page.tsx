@@ -19,8 +19,16 @@ import {
   RefreshCw,
   Sliders,
 } from "lucide-react";
-import { AnalyticsReport, AnalyticsPeriod } from "@/lib/services/analytics.service";
+import { AnalyticsReport, AnalyticsPeriod, LinkAlert } from "@/lib/services/analytics.service";
 import Link from "next/link";
+
+const ALERT_LABELS: Record<LinkAlert["type"], string> = {
+  EXPIRED: "Expired",
+  DISABLED: "Disabled",
+  EXPIRING_SOON: "Expiring Soon",
+  NEAR_LIMIT: "Near Limit",
+  LIMIT_REACHED: "Limit Reached",
+};
 
 interface UserInfo {
   userId: string;
@@ -240,7 +248,7 @@ export default function AnalyticsPage() {
                     }`}
                     style={{ fontSize: "0.7rem" }}
                   >
-                    {alert.type.replace("_", " ")}
+                    {ALERT_LABELS[alert.type] || alert.type}
                   </span>
                 </div>
                 <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)" }}>

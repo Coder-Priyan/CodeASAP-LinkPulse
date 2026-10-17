@@ -14,6 +14,7 @@ import {
   Lock,
 } from "lucide-react";
 import { EditLinkModal } from "./EditLinkModal";
+import { buildShortUrl } from "@/lib/utils/short-url";
 
 export type ComputedLinkState = "active" | "expired" | "limit_reached" | "disabled";
 
@@ -53,15 +54,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
 
-  const getFullShortUrl = (code: string) => {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (typeof window !== "undefined"
-        ? window.location.origin
-        : "");
-
-    return `${baseUrl.replace(/\/$/, "")}/${code}`;
-  };
+  const getFullShortUrl = (code: string) => buildShortUrl(code);
 
   const handleCopy = (id: string, code: string) => {
     const url = getFullShortUrl(code);

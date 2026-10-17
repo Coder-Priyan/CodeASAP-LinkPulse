@@ -125,4 +125,57 @@ describe("8. Live Analytics Aggregation & Data Consistency", () => {
     expect(campStat.topLink?.code).toBe(link1.code);
     expect(campStat.topLink?.clicks).toBe(3);
   });
+
+  it("generates correct alert types including EXPIRED for expired links and DISABLED for inactive links", async () => {
+    // 1. Expired link
+    const expiredLink = await db.link.create({
+      data: {
+        code: `test-alert-exp-${Date.now()}`,
+        destinationUrl: "https://example.com/expired",
+        userId: testUserId,
+        expiresAt: new Date(Date.now() - 3600 * 1000), // 1 hour ago
+      },
+    });
+    createdLinkIds.push(expiredLink.id);
+
+    // 2. Disabled link
+    const disabledLink = await db.link.create({
+      data: {
+        code: `test-alert-dis-${Date.now()}`,
+        destinationUrl: "https://example.com/disabled",
+        userId: testUserId,
+        isActive: false,
+        disabledReason: "Policy hold",
+      },
+    });
+    createdLinkIds.push(disabledLink.id);
+
+    // 3. Limit reached link
+    const limitLink = await db.link.create({
+      data: {
+        code: `test-alert-lim-${Date.now()}`,
+        destinationUrl: "https://example.com/limit",
+        userId: testUserId,
+        clickLimit: 10,
+        clicksCount: 10,
+      },
+    });
+    createdLinkIds.push(limitLink.id);
+
+    const report = await getAnalyticsReport(testUserId, Role.USER, { period: "7d" });
+
+    const expiredAlert = report.alerts.find((a) => a.id === expiredLink.id);
+    expect(expiredAlert).toBeDefined();
+    expect(expiredAlert?.type).toBe("EXPIRED");
+    expect(expiredAlert?.message).toBe("Link has expired.");
+
+    const disabledAlert = report.alerts.find((a) => a.id === disabledLink.id);
+    expect(disabledAlert).toBeDefined();
+    expect(disabledAlert?.type).toBe("DISABLED");
+    expect(disabledAlert?.message).toBe("Policy hold");
+
+    const limitAlert = report.alerts.find((a) => a.id === limitLink.id);
+    expect(limitAlert).toBeDefined();
+    expect(limitAlert?.type).toBe("LIMIT_REACHED");
+  });
 });

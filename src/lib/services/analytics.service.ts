@@ -36,7 +36,7 @@ export interface LinkAlert {
   id: string;
   code: string;
   destinationUrl: string;
-  type: "EXPIRING_SOON" | "NEAR_LIMIT" | "LIMIT_REACHED" | "DISABLED";
+  type: "EXPIRING_SOON" | "NEAR_LIMIT" | "LIMIT_REACHED" | "DISABLED" | "EXPIRED";
   message: string;
 }
 
@@ -301,7 +301,7 @@ export async function getAnalyticsReport(
         id: l.id,
         code: l.code,
         destinationUrl: l.destinationUrl,
-        type: "DISABLED",
+        type: "EXPIRED",
         message: "Link has expired.",
       });
     } else if (l.expiresAt && l.expiresAt.getTime() <= seventyTwoHoursLater.getTime()) {

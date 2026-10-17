@@ -36,7 +36,7 @@ A URL shortener with analytics. Shorten a URL, set rules on it — expiry date, 
 - Clicks over time (daily buckets for the selected period)
 - Campaign performance: total links, total clicks, top link per campaign
 - Top links, device breakdown, browser breakdown, referrer breakdown
-- Link alerts: `DISABLED`, expired (flagged as `DISABLED`), `EXPIRING_SOON` (within 72 h), `LIMIT_REACHED` (clicks ≥ limit), `NEAR_LIMIT` (clicks ≥ 80% of limit)
+- Link alerts: `DISABLED`, `EXPIRED`, `EXPIRING_SOON` (within 72 h), `LIMIT_REACHED` (clicks ≥ limit), `NEAR_LIMIT` (clicks ≥ 80% of limit)
 - Users see only their own data; admins can view platform-wide totals
 
 **Security**
@@ -203,6 +203,10 @@ cp .env.example .env
 | `JWT_SECRET` | Signs session tokens; use a random string of at least 32 characters in production | Yes |
 | `VISITOR_SALT` | Salt for visitor SHA-256 hashes; must be different from `JWT_SECRET` | Yes |
 | `NODE_ENV` | Set to `production` for deployed builds | No |
+| `SEED_CONFIRM` | Must equal `yes` to authorize running the destructive seed script | Only for seed |
+| `SEED_ADMIN_PASSWORD` | Demo admin account password (minimum 12 characters) | Only for seed |
+| `SEED_USER_PASSWORD` | Demo user account password (minimum 12 characters) | Only for seed |
+| `SEED_LINK_PASSCODE` | Passcode for sample password-protected link (`/roadmap`) | Only for seed |
 
 ### Database setup
 
@@ -233,26 +237,30 @@ npm run start
 
 > **Warning: the seed script deletes all existing rows in every table** before inserting sample data. It wipes `PasswordAttempt`, `ClickEvent`, `LinkTag`, `Tag`, `Link`, `Campaign`, and `User` unconditionally. Do not run it against a database that holds real data.
 >
-> There is no confirmation variable or guard. The wipe runs as soon as the script is called.
+> **Safety Guard**: The script requires `SEED_CONFIRM="yes"` in the environment to execute. If this variable is missing or does not equal `yes`, the script immediately halts with an error and will not touch any data. Passwords must be provided via `SEED_ADMIN_PASSWORD` (min 12 chars), `SEED_USER_PASSWORD` (min 12 chars), and `SEED_LINK_PASSCODE`. No hardcoded passwords exist in the codebase.
 
 ```bash
+SEED_CONFIRM="yes" \
+SEED_ADMIN_PASSWORD="YourSecureAdminPassword123!" \
+SEED_USER_PASSWORD="YourSecureUserPassword123!" \
+SEED_LINK_PASSCODE="YourSecureLinkPasscode123!" \
 npm run prisma:seed
 ```
 
-**Demo accounts** (all use password `Password123!`):
+**Demo accounts**:
 
-| Email | Role |
-|---|---|
-| admin@linkpulse.io | ADMIN |
-| alex@techcorp.dev | USER |
-| sarah@creatorhub.com | USER |
+| Email | Role | Password Source |
+|---|---|---|
+| admin@linkpulse.io | ADMIN | Configured via `SEED_ADMIN_PASSWORD` |
+| alex@techcorp.dev | USER | Configured via `SEED_USER_PASSWORD` |
+| sarah@creatorhub.com | USER | Configured via `SEED_USER_PASSWORD` |
 
 **Sample links** (owned by alex@techcorp.dev unless noted):
 
 | Code | State | Notes |
 |---|---|---|
 | `/docs` | Active | Developer Documentation campaign |
-| `/roadmap` | Password protected | Passcode: `Secret123!` |
+| `/roadmap` | Password protected | Passcode configured via `SEED_LINK_PASSCODE` |
 | `/launch2026` | Active | Spring Launch 2026 campaign |
 | `/vip-pass` | Limit reached | 15 of 15 clicks used |
 | `/early-bird` | Limit active | 12 of 50 clicks used |

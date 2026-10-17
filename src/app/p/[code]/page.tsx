@@ -39,7 +39,7 @@ export default function PasswordChallengePage() {
       }
 
       if (data.destinationUrl) {
-        window.location.href = data.destinationUrl;
+        location.href = data.destinationUrl;
       } else {
         router.push("/");
       }

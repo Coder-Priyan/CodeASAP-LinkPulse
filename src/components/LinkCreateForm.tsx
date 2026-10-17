@@ -18,6 +18,7 @@ import {
   Tag as TagIcon,
   Plus,
 } from "lucide-react";
+import { buildShortUrl } from "@/lib/utils/short-url";
 
 interface LinkCreateFormProps {
   onSuccess: () => void;
@@ -263,7 +264,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         throw new Error(data.error || "Failed to create short link.");
       }
 
-      const shortUrl = `${window.location.origin}/${data.link.code}`;
+      const shortUrl = buildShortUrl(data.link.code);
       setCreatedLink({
         code: data.link.code,
         destinationUrl: data.link.destinationUrl,

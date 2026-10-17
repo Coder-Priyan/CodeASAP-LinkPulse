@@ -19,7 +19,35 @@ function generateFakeVisitorHash(visitorKey: string): string {
 }
 
 async function main() {
-  console.log("🌱 Starting LinkPulse Milestone 3 database seed...");
+  if (process.env.SEED_CONFIRM !== "yes") {
+    console.error(
+      "❌ SEED REFUSED: The SEED_CONFIRM environment variable must equal 'yes' to run this destructive seed script.\n" +
+      "This guard prevents accidental data wipes on production or shared databases.\n" +
+      "Set SEED_CONFIRM=\"yes\" alongside SEED_ADMIN_PASSWORD, SEED_USER_PASSWORD, and SEED_LINK_PASSCODE to proceed."
+    );
+    process.exit(1);
+  }
+
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  const userPassword = process.env.SEED_USER_PASSWORD;
+  const linkPasscode = process.env.SEED_LINK_PASSCODE;
+
+  if (!adminPassword || adminPassword.length < 12) {
+    console.error("❌ Missing or invalid SEED_ADMIN_PASSWORD: must be at least 12 characters.");
+    process.exit(1);
+  }
+
+  if (!userPassword || userPassword.length < 12) {
+    console.error("❌ Missing or invalid SEED_USER_PASSWORD: must be at least 12 characters.");
+    process.exit(1);
+  }
+
+  if (!linkPasscode || linkPasscode.trim().length === 0) {
+    console.error("❌ Missing or invalid SEED_LINK_PASSCODE: passcode cannot be empty.");
+    process.exit(1);
+  }
+
+  console.log("🌱 Starting LinkPulse database seed...");
 
   // 1. Clean existing records for idempotent seed
   await prisma.passwordAttempt.deleteMany();
@@ -32,9 +60,10 @@ async function main() {
 
   console.log("🧹 Cleaned old records.");
 
-  // 2. Hash default passwords
-  const passwordHash = await bcrypt.hash("Password123!", 12);
-  const linkPasscodeHash = await bcrypt.hash("Secret123!", 12);
+  // 2. Hash passwords provided via validated environment variables
+  const adminPasswordHash = await bcrypt.hash(adminPassword, 12);
+  const userPasswordHash = await bcrypt.hash(userPassword, 12);
+  const linkPasscodeHash = await bcrypt.hash(linkPasscode, 12);
 
   // 3. Create Users
   const adminUser = await prisma.user.create({
@@ -42,7 +71,7 @@ async function main() {
       email: "admin@linkpulse.io",
       name: "Jordan Admin",
       role: Role.ADMIN,
-      passwordHash,
+      passwordHash: adminPasswordHash,
     },
   });
 
@@ -51,7 +80,7 @@ async function main() {
       email: "alex@techcorp.dev",
       name: "Alex Rivera",
       role: Role.USER,
-      passwordHash,
+      passwordHash: userPasswordHash,
     },
   });
 
@@ -60,7 +89,7 @@ async function main() {
       email: "sarah@creatorhub.com",
       name: "Sarah Chen",
       role: Role.USER,
-      passwordHash,
+      passwordHash: userPasswordHash,
     },
   });
 
@@ -295,15 +324,13 @@ async function main() {
     data: clickData,
   });
 
-  console.log(`📊 Seeded ${clickData.length} realistic ClickEvents with daily distributions and distinct visitor hashes.`);
-  console.log("✅ LinkPulse Milestone 3 database seeded successfully!");
-  console.log("\nCredentials:");
-  console.log("  Admin: admin@linkpulse.io / Password123!");
-  console.log("  User:  alex@techcorp.dev  / Password123!");
-  console.log("  User:  sarah@creatorhub.com / Password123!");
-  console.log("\nProtected Link:");
-  console.log("  Code: /roadmap");
-  console.log("  Passcode: Secret123!");
+  console.log("✅ LinkPulse database seeded successfully!");
+  console.log("\nDemo Accounts Created:");
+  console.log("  Admin: admin@linkpulse.io (password configured via SEED_ADMIN_PASSWORD)");
+  console.log("  User:  alex@techcorp.dev  (password configured via SEED_USER_PASSWORD)");
+  console.log("  User:  sarah@creatorhub.com (password configured via SEED_USER_PASSWORD)");
+  console.log("\nSample Protected Link:");
+  console.log("  Code: /roadmap (passcode configured via SEED_LINK_PASSCODE)");
 }
 
 main()

@@ -131,48 +131,50 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Quick Demo Credentials */}
-        <div
-          style={{
-            marginTop: "1.75rem",
-            paddingTop: "1.5rem",
-            borderTop: "1px solid var(--border-color)",
-          }}
-        >
-          <p
+        {/* Quick Demo Credentials (development only, eliminated from production bundle) */}
+        {process.env.NODE_ENV !== "production" && (
+          <div
             style={{
-              fontSize: "0.75rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              color: "var(--text-muted)",
-              marginBottom: "0.75rem",
-              fontWeight: 600,
+              marginTop: "1.75rem",
+              paddingTop: "1.5rem",
+              borderTop: "1px solid var(--border-color)",
             }}
           >
-            Quick Demo Accounts (from seed)
-          </p>
+            <p
+              style={{
+                fontSize: "0.75rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "var(--text-muted)",
+                marginBottom: "0.75rem",
+                fontWeight: 600,
+              }}
+            >
+              Quick Demo Accounts (from seed)
+            </p>
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1, fontSize: "0.8rem" }}
-              onClick={() => fillCredentials("admin@linkpulse.io", "Password123!")}
-            >
-              <Shield size={14} color="#c084fc" />
-              <span>Admin Demo</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1, fontSize: "0.8rem" }}
-              onClick={() => fillCredentials("alex@techcorp.dev", "Password123!")}
-            >
-              <User size={14} color="#38bdf8" />
-              <span>User Demo</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ flex: 1, fontSize: "0.8rem" }}
+                onClick={() => fillCredentials("admin@linkpulse.io", "Password123!")}
+              >
+                <Shield size={14} color="#c084fc" />
+                <span>Admin Demo</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ flex: 1, fontSize: "0.8rem" }}
+                onClick={() => fillCredentials("alex@techcorp.dev", "Password123!")}
+              >
+                <User size={14} color="#38bdf8" />
+                <span>User Demo</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <p
           style={{

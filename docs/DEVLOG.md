@@ -1,5 +1,12 @@
 # LinkPulse Devlog
 
+### 2026-10-17 — Production Hardening & Demo Data Preparation
+- **What**: Added a strict confirmation guard (`SEED_CONFIRM="yes"`) and environment-driven passwords to the seed script; restricted one-click login demo credentials to non-production builds with complete dead-code elimination in production bundles; unified short URL construction across components into a centralized helper; differentiated expired link alerts as `EXPIRED` ("Expired" in UI); verified production session cookie security attributes.
+- **Why**: Prevent accidental destructive database wipes on shared/live databases, ensure zero default credentials leak into production client assets, eliminate discrepancies in client-side short URL generation, and provide precise operational alert semantics for expired links.
+- **How**: Guarded `prisma/seed.ts` with `SEED_CONFIRM`, `SEED_ADMIN_PASSWORD` (min 12 chars), `SEED_USER_PASSWORD` (min 12 chars), and `SEED_LINK_PASSCODE`; wrapped login demo buttons in `process.env.NODE_ENV !== "production"`; implemented `src/lib/utils/short-url.ts` prioritizing `NEXT_PUBLIC_APP_URL` over `window.location.origin`; updated analytics alert typing and badges to `EXPIRED`/`Expired`; added comprehensive Vitest unit tests for the helper and alert classifications.
+- **Requirement**: Make LinkPulse safe to run on the live site and prepare it for demo data. Do not commit or push. Do not run the seed script or any prisma or database command. Do not print or log any secret.
+- **Next**: Run deployment verification checks and execute seed on production database only when explicitly confirmed.
+
 ### 2026-10-16 — Documentation: README Rewrite
 - **What**: Replaced the old README with a plain-English document covering features, redirect flow, architecture, data model, env vars, seed data, tests, and API routes.
 - **Why**: The old README used marketing language and some details were inaccurate or unverified (seed link codes and click counts had drifted from the actual seed script). Every statement in the new README was checked against the code before writing.
