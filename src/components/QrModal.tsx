@@ -66,13 +66,14 @@ export function QrModal({ link, isOpen, onClose }: QrModalProps) {
 
   if (!isOpen) return null;
 
-  const qrTargetUrl = `${buildShortUrl(link.code)}?src=qr`;
+  const plainShortUrl = buildShortUrl(link.code);
+  const qrTargetUrl = `${plainShortUrl}?src=qr`;
   const pngUrl = `/api/links/${link.id}/qr?format=png`;
   const pngDownloadUrl = `/api/links/${link.id}/qr?format=png&download=true`;
   const svgDownloadUrl = `/api/links/${link.id}/qr?format=svg&download=true`;
 
   const handleCopyTarget = () => {
-    navigator.clipboard.writeText(qrTargetUrl);
+    navigator.clipboard.writeText(plainShortUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

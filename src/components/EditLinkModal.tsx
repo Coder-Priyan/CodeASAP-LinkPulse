@@ -245,29 +245,47 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
             }}
           >
             <div>
-              <div style={{ fontSize: "0.95rem", fontWeight: 700 }}>Redirect Status</div>
+              <div id="redirect-status-label" style={{ fontSize: "0.95rem", fontWeight: 700 }}>Redirect Status</div>
               <div style={{ fontSize: "0.825rem", color: "var(--color-muted)", fontWeight: 600 }}>
                 {isActive ? "Link actively redirects visitors" : "Link is temporarily deactivated"}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsActive(true)}
-                className={`btn btn-sm ${isActive ? "btn-primary" : "btn-secondary"}`}
-                style={{ padding: "0.35rem 0.75rem", fontSize: "0.825rem", minHeight: "36px" }}
-              >
-                Active
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsActive(false)}
-                className={`btn btn-sm ${!isActive ? "btn-danger" : "btn-secondary"}`}
-                style={{ padding: "0.35rem 0.75rem", fontSize: "0.825rem", minHeight: "36px" }}
-              >
-                Disabled
-              </button>
-            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isActive}
+              aria-labelledby="redirect-status-label"
+              onClick={() => setIsActive(!isActive)}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  setIsActive(!isActive);
+                }
+              }}
+              className={`btn btn-sm ${isActive ? "btn-primary" : "btn-danger"}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.35rem 0.85rem",
+                fontSize: "0.85rem",
+                minHeight: "38px",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >
+              <span
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  borderRadius: "50%",
+                  backgroundColor: isActive ? "var(--color-yellow)" : "var(--color-paper)",
+                  border: "1.5px solid var(--color-ink)",
+                  display: "inline-block",
+                }}
+              />
+              <span>{isActive ? "Active (Accepting Visits)" : "Disabled (Blocked)"}</span>
+            </button>
           </div>
 
           {!isActive && (

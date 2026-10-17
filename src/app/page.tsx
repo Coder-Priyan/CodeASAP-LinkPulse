@@ -75,7 +75,7 @@ export default async function HomePage() {
               </span>
               <span className="badge badge-active flex items-center gap-1" style={{ fontSize: "0.75rem" }}>
                 <CheckCircle2 size={13} strokeWidth={2.5} />
-                <span>Live Engine</span>
+                <span>Demo Preview</span>
               </span>
             </div>
           </div>

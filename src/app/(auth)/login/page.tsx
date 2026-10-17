@@ -96,7 +96,7 @@ export default function LoginPage() {
                 <ShieldCheck size={20} strokeWidth={2.5} style={{ color: "var(--color-blue)", flexShrink: 0, marginTop: "2px" }} />
                 <div>
                   <strong>First-Party Click Telemetry</strong>
-                  <p>Built-in visit and referrer analytics without third-party ad pixels or tracking cookies.</p>
+                  <p>First-party visit and referrer telemetry recorded directly to your database.</p>
                 </div>
               </div>
 

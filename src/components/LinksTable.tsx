@@ -74,12 +74,34 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   // Keyboard shortcut listener: press Ctrl+K / Cmd+K or '/' to focus search, Esc to clear
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = (document.activeElement as HTMLElement)?.tagName;
       const isCtrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k";
-      const isSlash = e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(activeTag);
+      const isSlash = e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey;
+
+      if (isCtrlK) {
+        e.preventDefault();
+      }
+
+      const activeEl = document.activeElement as HTMLElement | null;
+      const targetEl = e.target as HTMLElement | null;
+      const el = activeEl || targetEl;
+
+      const isEditable = Boolean(
+        el && (
+          ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) ||
+          el.isContentEditable ||
+          el.getAttribute("contenteditable") === "true" ||
+          el.closest("[contenteditable='true']") !== null ||
+          el.closest("[role='dialog']") !== null
+        )
+      );
+
+      if (isEditable) {
+        // Do not steal focus from form fields, editors, or open modals
+        return;
+      }
 
       if (isCtrlK || isSlash) {
-        e.preventDefault();
+        if (isSlash) e.preventDefault();
         searchInputRef.current?.focus();
       } else if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
         setSearchQuery("");

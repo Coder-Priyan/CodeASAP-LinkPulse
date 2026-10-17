@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Activity, ShieldCheck, Heart } from "lucide-react";
+import { Activity } from "lucide-react";
+import pkg from "../../package.json";
 
 export function Footer() {
   return (
@@ -30,7 +31,7 @@ export function Footer() {
               className="badge badge-paper"
               style={{ fontSize: "0.7rem", padding: "0.1rem 0.45rem", marginLeft: "0.35rem" }}
             >
-              v1.2.0
+              v{pkg.version}
             </span>
           </div>
           <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", marginTop: "0.35rem", fontWeight: 600 }}>
@@ -54,30 +55,21 @@ export function Footer() {
             </Link>
           </div>
 
-          <div className="flex items-center gap-3" style={{ marginTop: "0.5rem", flexWrap: "wrap" }}>
-            <span
-              className="badge badge-active flex items-center gap-1.5"
-              style={{ fontSize: "0.75rem", textTransform: "none" }}
-            >
-              <span
-                style={{
-                  width: "7px",
-                  height: "7px",
-                  borderRadius: "50%",
-                  backgroundColor: "var(--color-ink)",
-                  display: "inline-block",
-                }}
-              />
-              <span>Telemetry Engine Live</span>
-            </span>
-
-            <span
-              className="badge badge-paper flex items-center gap-1"
-              style={{ fontSize: "0.75rem", textTransform: "none" }}
-            >
-              <ShieldCheck size={12} strokeWidth={2.5} style={{ color: "var(--color-blue)" }} />
-              <span>Domain Safety Guard</span>
-            </span>
+          <div
+            className="flex items-center gap-2"
+            style={{
+              marginTop: "0.65rem",
+              flexWrap: "wrap",
+              fontSize: "0.8rem",
+              color: "var(--color-muted)",
+              fontWeight: 600,
+            }}
+          >
+            <span>Next.js App Router</span>
+            <span aria-hidden="true">&bull;</span>
+            <span>TypeScript</span>
+            <span aria-hidden="true">&bull;</span>
+            <span>Prisma &amp; PostgreSQL</span>
           </div>
         </div>
       </div>

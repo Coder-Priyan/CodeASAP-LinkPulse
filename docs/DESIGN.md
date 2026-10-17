@@ -203,7 +203,7 @@ Desktop viewports ($\ge 1024\text{px}$) balance three complementary attributes: 
 
 ### Where Personality Lives
 - **Hero Companion Deck**: Mascot "Pulse" is integrated with a speech bubble badge (`"Fast redirects. Clear click telemetry."`) directly above the landing title.
-- **Live Simulator Card**: Interactive desktop product showcase card on the landing page labeled explicitly as `Interactive Demo (Sample Data)`, displaying realistic short codes, copy affordance, active status, and telemetry pill counters (`1,482 visits`, `1,120 uniques`, `362 QR scans`, `0 3rd-party trackers`).
+- **Live Simulator Card**: Interactive desktop product showcase card on the landing page labeled explicitly as `Interactive Demo (Sample Data)`, displaying realistic short codes, copy affordance, active status, and telemetry pill counters (`1,482 visits`, `1,120 uniques`, `362 QR scans`, `1,120 direct clicks`).
 - **Split Authentication Layout**: Desktop login and register pages pair a characterful brand panel (`.auth-brand-panel`) on the left with the calm, focused sign-in form on the right.
 - **Top Link Rank Medals**: Top performing links in analytics feature distinct rank medals (`#1` butter, `#2` sage/teal tint, `#3` coral tint) for instant spatial hierarchy.
 
@@ -220,7 +220,7 @@ Desktop viewports ($\ge 1024\text{px}$) balance three complementary attributes: 
 Desktop viewports ($\ge 1024\text{px}$) in Round 2 receive major functional UX enhancements that make LinkPulse a power tool while maintaining full neo-brutalist charm:
 
 ### 1. Instant Desktop Search & Keyboard Navigation (`/` or `Ctrl+K`)
-- **Global Desktop Listener**: Users can press `/` anywhere on desktop to immediately focus the link filter input without touching the mouse.
+- **Global Desktop Listener**: Users can press `/` or `Ctrl+K` / `Cmd+K` anywhere on desktop to immediately focus the link filter input without touching the mouse.
 - **Escape Affordance**: Pressing `Escape` while focused clears the filter query and returns focus to the table.
 - **Client-Side Responsiveness**: Filters links across code, title, destination URL, campaign, and tags instantly, with a real-time count badge (`Showing X of Y links`) and one-click reset button.
 
@@ -236,7 +236,7 @@ Desktop viewports ($\ge 1024\text{px}$) in Round 2 receive major functional UX e
   1. *Paste & Shorten*: Directs users to the two-step shortener wizard.
   2. *Grab QR Code*: Explains tactile vector QR code export and physical scan attribution.
   3. *Inspect Telemetry*: Explains privacy-safe click telemetry, unique visitor tracking, and referrers.
-- **Desktop Pro-Tip Banner**: When links exist, displays a non-intrusive tip bar highlighting the `/` shortcut and `?src=qr` query parameter.
+- **Desktop Pro-Tip Banner**: When links exist, displays a non-intrusive tip bar highlighting the `Ctrl+K` and `/` shortcuts.
 
 ### 4. Tactile Notification System & Inline Feedback
 - **Floating Toast**: Neo-brutalist toast alert (`.toast-notification`) appears in the bottom-right viewport on copy actions (`Copied short link to clipboard: ...`), self-dismissing after 2.4 seconds.
@@ -246,6 +246,29 @@ Desktop viewports ($\ge 1024\text{px}$) in Round 2 receive major functional UX e
 ### 5. CSV Bulk Import Drag & Drop
 - **Dragover Feedback**: Active `.upload-dropzone.dragover` state highlights the dropzone with a butter yellow tint and raised shadow when files are dragged over.
 - **One-Click Sample Loader**: "Load Sample CSV" button allows instant testing of the 200-row validator without requiring file downloads.
+
+---
+
+## 11. Desktop Redesign Round 3 & Fine-Tuning Enhancements
+
+### 1. Neo-Brutalist Desktop Footer (`.footer-neo`)
+- Persistent desktop footer containing verified package version (`v0.1.0`), brand deck, quick navigation links, and real tech stack attribution (`Next.js App Router • TypeScript • Prisma & PostgreSQL`).
+- Avoids unverified or simulated telemetry status indicators.
+
+### 2. Accessible Switch Toggle in Modals
+- `EditLinkModal` incorporates an accessible switch toggle with `role="switch"`, `aria-checked`, `aria-labelledby`, and Space/Enter keyboard support.
+- Replaces generic checkboxes and multi-button clusters with an unmistakable single-control switch.
+
+### 3. High-DPI Vector QR Downloads & Clean Copy
+- `QrModal` provides distinct actions for print-ready Vector SVG and web-ready High-Res PNG downloads (both encoding `?src=qr` on the server).
+- In-modal copy button copies the plain canonical short link without query parameter noise.
+
+### 4. Keyboard Shortcut Focus Protection
+- `/` and `Ctrl+K` shortcuts are intelligently suppressed while focus resides within any `input`, `textarea`, `select`, `contenteditable`, or open dialog modal.
+- `Ctrl+K` consistently executes `preventDefault()` to prevent default browser address bar capture.
+
+### 5. Password Strength Feedback (`/register`)
+- Real-time 4-segment neo-brutalist strength meter on the registration form providing instant visual clarity (Too short, Fair, Good, Strong) and character counter.
 
 
 
