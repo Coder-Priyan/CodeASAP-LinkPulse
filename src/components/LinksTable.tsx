@@ -54,10 +54,13 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
 
   const getFullShortUrl = (code: string) => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/${code}`;
-    }
-    return `/${code}`;
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (typeof window !== "undefined"
+        ? window.location.origin
+        : "");
+
+    return `${baseUrl.replace(/\/$/, "")}/${code}`;
   };
 
   const handleCopy = (id: string, code: string) => {
