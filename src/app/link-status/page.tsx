@@ -1,119 +1,109 @@
 import Link from "next/link";
-import { AlertCircle, Clock, SearchX, ArrowLeft, Zap, Gauge, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Zap } from "lucide-react";
+import { PulseMascot, MascotMood } from "@/components/PulseMascot";
+
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Link Status",
+};
 
 interface PageProps {
   searchParams: Promise<{
     code?: string;
     status?: string;
-    reason?: string;
   }>;
 }
 
 export default async function LinkStatusPage({ searchParams }: PageProps) {
-  const { code, status, reason } = await searchParams;
+  const { code, status } = await searchParams;
 
-  const isExpired = status === "EXPIRED";
-  const isInactive = status === "INACTIVE" || status === "DISABLED";
-  const isLimitReached = status === "LIMIT_REACHED";
-  const isBlocked = status === "BLOCKED";
+  const normalizedStatus = (status || "").toUpperCase();
+  const isExpired = normalizedStatus === "EXPIRED";
+  const isInactive = normalizedStatus === "INACTIVE" || normalizedStatus === "DISABLED";
+  const isLimitReached = normalizedStatus === "LIMIT_REACHED";
+  const isBlocked = normalizedStatus === "BLOCKED";
+  const isPassword = normalizedStatus === "PASSWORD" || normalizedStatus === "PASSWORD_REQUIRED";
+
+  const isValidCode = typeof code === "string" && /^[A-Za-z0-9_-]{1,32}$/.test(code);
+  const safeCode = isValidCode ? code : null;
 
   let title = "Link Not Found";
-  let description =
-    reason || `We could not find an active link matching short code "${code || "unknown"}".`;
-  let IconComponent = SearchX;
-  let iconColor = "var(--danger)";
-  let iconBg = "var(--danger-bg)";
+  let description = "We could not find an active link matching this short code.";
+  let mood: MascotMood = "sad";
 
   if (isLimitReached) {
     title = "Click Limit Reached";
-    description =
-      reason ||
-      `The short link "/${code}" has reached its maximum visit capacity set by its owner.`;
-    IconComponent = Gauge;
-    iconColor = "var(--warning)";
-    iconBg = "var(--warning-bg)";
+    description = "This short link has reached its maximum visit limit set by its creator.";
+    mood = "surprised";
   } else if (isExpired) {
     title = "Link Has Expired";
-    description =
-      reason || `The shortened link "/${code}" was configured with an expiration date and is no longer available.`;
-    IconComponent = Clock;
-    iconColor = "var(--warning)";
-    iconBg = "var(--warning-bg)";
+    description = "This shortened link was configured with an expiration date and is no longer active.";
+    mood = "sad";
   } else if (isInactive) {
-    title = "Link Currently Deactivated";
-    description =
-      reason || `The link "/${code}" has been temporarily deactivated by its owner or an administrator.`;
-    IconComponent = AlertCircle;
-    iconColor = "var(--warning)";
-    iconBg = "var(--warning-bg)";
+    title = "Link Currently Disabled";
+    description = "This short link has been temporarily disabled by its owner or an administrator.";
+    mood = "thinking";
   } else if (isBlocked) {
     title = "Destination Domain Blocked";
-    description =
-      reason || `The destination domain for "/${code}" has been blocked by administrators for safety or policy compliance.`;
-    IconComponent = ShieldAlert;
-    iconColor = "var(--danger)";
-    iconBg = "var(--danger-bg)";
+    description = "The destination domain for this link has been blocked by administrators for safety and policy compliance.";
+    mood = "sad";
+  } else if (isPassword) {
+    title = "Passcode Protected";
+    description = "This short link is protected with a passcode before redirecting.";
+    mood = "thinking";
   }
 
   return (
-    <div className="container" style={{ maxWidth: "560px", paddingTop: "5rem", textAlign: "center" }}>
+    <div className="container" style={{ maxWidth: "560px", paddingTop: "4.5rem", paddingBottom: "4rem", textAlign: "center" }}>
       <div className="card">
-        <div
-          style={{
-            width: "64px",
-            height: "64px",
-            borderRadius: "50%",
-            background: iconBg,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: "1.5rem",
-          }}
-        >
-          <IconComponent size={32} color={iconColor} />
+        <div style={{ display: "inline-flex", justifyContent: "center", marginBottom: "1.25rem" }}>
+          <PulseMascot mood={mood} size={110} />
         </div>
 
-        <h1 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: "0.75rem" }}>
+        <h1 style={{ fontSize: "1.85rem", marginBottom: "0.5rem" }}>
           {title}
         </h1>
 
         <p
           style={{
-            color: "var(--text-secondary)",
+            color: "var(--color-muted)",
             fontSize: "0.975rem",
             lineHeight: 1.6,
-            marginBottom: "2rem",
+            marginBottom: "1.5rem",
           }}
         >
           {description}
         </p>
 
-        {code && (
+        {safeCode && (
           <div
             style={{
               display: "inline-block",
-              background: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid var(--border-color)",
-              padding: "0.5rem 1rem",
+              backgroundColor: "var(--color-paper)",
+              border: "var(--border-thick)",
+              padding: "0.4rem 0.85rem",
               borderRadius: "var(--radius-sm)",
-              fontFamily: "monospace",
-              color: "var(--text-muted)",
-              fontSize: "0.85rem",
-              marginBottom: "2rem",
+              fontFamily: "var(--font-mono-family)",
+              color: "var(--color-ink)",
+              fontSize: "0.9rem",
+              fontWeight: 700,
+              boxShadow: "var(--shadow-hard-sm)",
+              marginBottom: "1.75rem",
             }}
           >
-            Target Code: <strong>/{code}</strong>
+            Target Code: <span>/{safeCode}</span>
           </div>
         )}
 
-        <div className="flex gap-3" style={{ justifyContent: "center" }}>
+        <div className="flex gap-3" style={{ justifyContent: "center", flexWrap: "wrap" }}>
           <Link href="/" className="btn btn-secondary flex items-center gap-2">
-            <ArrowLeft size={16} />
+            <ArrowLeft size={18} strokeWidth={2.5} />
             <span>Go to Homepage</span>
           </Link>
 
           <Link href="/dashboard" className="btn btn-primary flex items-center gap-2">
-            <Zap size={16} />
+            <Zap size={18} strokeWidth={2.5} />
             <span>Create New Link</span>
           </Link>
         </div>

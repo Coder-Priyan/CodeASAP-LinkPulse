@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Upload,
@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   RefreshCw,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
 
 interface CsvRowPreview {
@@ -54,6 +55,11 @@ export default function CsvImportPage() {
   const [importing, setImporting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  useEffect(() => {
+    document.title = "CSV Import | LinkPulse";
+  }, []);
 
   const handleDownloadTemplate = () => {
     const blob = new Blob([SAMPLE_CSV], { type: "text/csv;charset=utf-8;" });
@@ -65,6 +71,12 @@ export default function CsvImportPage() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleLoadSample = () => {
+    setFile(new File([SAMPLE_CSV], "sample-import.csv", { type: "text/csv" }));
+    setCsvContent(SAMPLE_CSV);
+    handlePreview(SAMPLE_CSV);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,6 +102,40 @@ export default function CsvImportPage() {
       handlePreview(text);
     };
     reader.readAsText(selected);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (!droppedFile) return;
+
+    if (droppedFile.size > 1024 * 1024) {
+      setErrorMessage("File exceeds maximum allowed size of 1 MB.");
+      return;
+    }
+
+    setFile(droppedFile);
+    setErrorMessage(null);
+    setSummary(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = (event.target?.result as string) || "";
+      setCsvContent(text);
+      handlePreview(text);
+    };
+    reader.readAsText(droppedFile);
   };
 
   const handlePreview = async (content: string) => {
@@ -147,11 +193,11 @@ export default function CsvImportPage() {
   const invalidCount = previewRows.length - validCount;
 
   return (
-    <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "2rem 1rem" }}>
+    <div className="container" style={{ paddingTop: "2.5rem", paddingBottom: "4rem" }}>
       {/* Top Navigation */}
       <div style={{ marginBottom: "1.5rem" }}>
-        <Link href="/dashboard" className="btn btn-secondary btn-sm flex items-center gap-2" style={{ display: "inline-flex" }}>
-          <ArrowLeft size={14} />
+        <Link href="/dashboard" className="btn btn-secondary btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+          <ArrowLeft size={16} />
           <span>Back to Dashboard</span>
         </Link>
       </div>
@@ -159,47 +205,68 @@ export default function CsvImportPage() {
       {/* Header */}
       <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem", marginBottom: "2rem" }}>
         <div>
-          <h1 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: "0.4rem" }} className="flex items-center gap-2">
-            <FileSpreadsheet size={28} color="var(--accent-primary)" />
+          <h1 style={{ fontSize: "1.85rem", fontWeight: 900, marginBottom: "0.4rem", fontFamily: "var(--font-display)" }} className="flex items-center gap-3">
+            <span className="icon-chip icon-chip-blue" style={{ width: "42px", height: "42px" }}>
+              <FileSpreadsheet size={22} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
+            </span>
             <span>CSV Bulk Import</span>
           </h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
+          <p style={{ color: "var(--color-ink-muted)", fontSize: "0.95rem" }}>
             Upload a CSV to batch create up to 200 shortened links into your account with automatic validation.
           </p>
         </div>
 
-        <button
-          onClick={handleDownloadTemplate}
-          className="btn btn-secondary flex items-center gap-2"
-        >
-          <Download size={15} />
-          <span>Download CSV Template</span>
-        </button>
+        <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
+          <button
+            onClick={handleLoadSample}
+            type="button"
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <Sparkles size={16} />
+            <span>Load Sample CSV</span>
+          </button>
+
+          <button
+            onClick={handleDownloadTemplate}
+            type="button"
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <Download size={16} />
+            <span>Download CSV Template</span>
+          </button>
+        </div>
       </div>
 
       {/* Upload Box */}
       <div className="card" style={{ marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1rem" }}>
+        <h2 style={{ fontSize: "1.2rem", fontWeight: 800, marginBottom: "1rem", fontFamily: "var(--font-display)" }}>
           Step 1: Select CSV File
         </h2>
 
         <div
-          style={{
-            border: "2px dashed var(--border-color)",
-            borderRadius: "var(--radius-lg)",
-            padding: "2.5rem 1.5rem",
-            textAlign: "center",
-            backgroundColor: "rgba(255, 255, 255, 0.02)",
-            cursor: "pointer",
-          }}
+          className={`upload-dropzone ${isDragOver ? "dragover" : ""}`}
           onClick={() => document.getElementById("csvFileInput")?.click()}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              document.getElementById("csvFileInput")?.click();
+            }
+          }}
+          aria-label="Upload CSV file"
         >
-          <Upload size={32} color="var(--accent-secondary)" style={{ margin: "0 auto 0.75rem" }} />
-          <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+          <div className="icon-chip icon-chip-blue" style={{ width: "48px", height: "48px", margin: "0 auto 0.75rem", display: "flex" }}>
+            <Upload size={24} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
+          </div>
+          <p style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "0.35rem", color: "var(--color-ink)" }}>
             {file ? file.name : "Click to select or drag and drop a CSV file"}
           </p>
-          <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-            Columns: <code style={{ color: "var(--accent-secondary)" }}>destination_url</code> (required), <code style={{ color: "var(--accent-secondary)" }}>alias</code> (optional), <code style={{ color: "var(--accent-secondary)" }}>title</code> (optional). Max 1 MB, 200 rows.
+          <p style={{ fontSize: "0.875rem", color: "var(--color-ink-muted)" }}>
+            Columns: <code className="code-badge">destination_url</code> (required), <code className="code-badge">alias</code> (optional), <code className="code-badge">title</code> (optional). Max 1 MB, 200 rows.
           </p>
           <input
             id="csvFileInput"
@@ -211,29 +278,16 @@ export default function CsvImportPage() {
         </div>
 
         {loading && (
-          <div className="flex items-center gap-2" style={{ marginTop: "1rem", color: "var(--accent-primary)" }}>
-            <RefreshCw size={16} className="spin" />
+          <div className="flex items-center gap-2" style={{ marginTop: "1.25rem", color: "var(--color-ink)", fontWeight: 600 }}>
+            <RefreshCw size={18} className="spin" />
             <span>Validating rows and checking domain blocklist...</span>
           </div>
         )}
 
         {errorMessage && (
-          <div
-            style={{
-              marginTop: "1rem",
-              padding: "0.75rem 1rem",
-              backgroundColor: "rgba(239, 68, 68, 0.1)",
-              border: "1px solid rgba(239, 68, 68, 0.3)",
-              borderRadius: "var(--radius-md)",
-              color: "#fca5a5",
-              fontSize: "0.875rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <AlertCircle size={16} />
-            <span>{errorMessage}</span>
+          <div className="alert alert-error" style={{ marginTop: "1.25rem" }}>
+            <AlertCircle size={18} />
+            <span style={{ fontWeight: 600 }}>{errorMessage}</span>
           </div>
         )}
       </div>
@@ -244,18 +298,32 @@ export default function CsvImportPage() {
           className="card"
           style={{
             marginBottom: "2rem",
-            backgroundColor: "rgba(16, 185, 129, 0.08)",
-            borderColor: "rgba(16, 185, 129, 0.3)",
+            backgroundColor: "var(--color-white)",
+            border: "2px solid var(--color-green)",
+            boxShadow: "var(--shadow-hard)",
           }}
         >
           <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem", marginBottom: "1rem" }}>
-            <div className="flex items-center gap-2">
-              <CheckCircle size={22} color="var(--success)" />
+            <div className="flex items-center gap-3">
+              <div
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "50%",
+                  backgroundColor: "var(--color-green)",
+                  border: "2px solid var(--color-ink)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <CheckCircle size={22} style={{ color: "var(--color-ink)" }} />
+              </div>
               <div>
-                <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#6ee7b7" }}>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--color-ink)", fontFamily: "var(--font-display)" }}>
                   Import Complete
                 </h3>
-                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                <p style={{ fontSize: "0.9rem", color: "var(--color-ink-muted)" }}>
                   Created <strong>{summary.createdCount}</strong> links, skipped <strong>{summary.skippedCount}</strong> rows.
                 </p>
               </div>
@@ -267,14 +335,14 @@ export default function CsvImportPage() {
           </div>
 
           {summary.skipped.length > 0 && (
-            <div style={{ marginTop: "1rem" }}>
-              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#fca5a5", marginBottom: "0.5rem" }}>
+            <div style={{ marginTop: "1rem", padding: "1rem", backgroundColor: "var(--color-paper)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-ink-faint)" }}>
+              <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-text-danger)", marginBottom: "0.5rem" }}>
                 Skipped Rows ({summary.skipped.length}):
               </div>
-              <ul style={{ fontSize: "0.8rem", color: "var(--text-muted)", paddingLeft: "1.25rem", margin: 0 }}>
+              <ul style={{ fontSize: "0.85rem", color: "var(--color-ink)", paddingLeft: "1.25rem", margin: 0 }}>
                 {summary.skipped.map((s, idx) => (
-                  <li key={idx} style={{ marginBottom: "0.25rem" }}>
-                    Line {s.lineNumber}: {s.reason} ({s.destinationUrl})
+                  <li key={idx} style={{ marginBottom: "0.35rem" }}>
+                    <strong>Line {s.lineNumber}:</strong> {s.reason} <span style={{ color: "var(--color-ink-muted)" }}>({s.destinationUrl})</span>
                   </li>
                 ))}
               </ul>
@@ -288,16 +356,18 @@ export default function CsvImportPage() {
         <div className="card">
           <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem", marginBottom: "1.25rem" }}>
             <div>
-              <h2 style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+              <h2 style={{ fontSize: "1.2rem", fontWeight: 800, fontFamily: "var(--font-display)" }}>
                 Step 2: Preview & Validate ({previewRows.length} rows)
               </h2>
-              <div className="flex items-center gap-3" style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
-                <span style={{ color: "var(--success)" }}>
-                  &bull; {validCount} valid
+              <div className="flex items-center gap-3" style={{ fontSize: "0.9rem", marginTop: "0.35rem" }}>
+                <span className="badge badge-active flex items-center gap-1" style={{ fontSize: "0.8rem" }}>
+                  <CheckCircle size={12} />
+                  <span>{validCount} valid</span>
                 </span>
                 {invalidCount > 0 && (
-                  <span style={{ color: "var(--danger)" }}>
-                    &bull; {invalidCount} invalid
+                  <span className="badge badge-disabled flex items-center gap-1" style={{ fontSize: "0.8rem" }}>
+                    <AlertCircle size={12} />
+                    <span>{invalidCount} invalid</span>
                   </span>
                 )}
               </div>
@@ -307,15 +377,16 @@ export default function CsvImportPage() {
               onClick={handleExecuteImport}
               disabled={importing || validCount === 0}
               className="btn btn-primary flex items-center gap-2"
+              type="button"
             >
               {importing ? (
                 <>
-                  <RefreshCw size={15} className="spin" />
+                  <RefreshCw size={16} className="spin" />
                   <span>Importing Links...</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle size={15} />
+                  <CheckCircle size={16} />
                   <span>Import {validCount} Valid {validCount === 1 ? "Link" : "Links"}</span>
                 </>
               )}
@@ -326,7 +397,7 @@ export default function CsvImportPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}>Line</th>
+                  <th style={{ width: "70px" }}>Line</th>
                   <th>Destination URL</th>
                   <th>Alias</th>
                   <th>Title</th>
@@ -336,47 +407,47 @@ export default function CsvImportPage() {
               <tbody>
                 {previewRows.map((row) => (
                   <tr key={row.lineNumber}>
-                    <td style={{ fontFamily: "monospace", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                    <td style={{ fontFamily: "monospace", color: "var(--color-ink-muted)", fontSize: "0.9rem", fontWeight: 600 }}>
                       {row.lineNumber}
                     </td>
                     <td>
-                      <div className="truncate max-w-xs" title={row.rawUrl} style={{ fontSize: "0.85rem" }}>
+                      <div className="truncate max-w-xs" title={row.rawUrl} style={{ fontSize: "0.9rem", color: "var(--color-ink)", fontWeight: 500 }}>
                         {row.rawUrl}
                       </div>
                     </td>
                     <td>
                       {row.rawAlias ? (
-                        <span style={{ fontFamily: "monospace", fontSize: "0.85rem", color: "var(--accent-secondary)" }}>
+                        <code className="code-badge" style={{ fontSize: "0.85rem" }}>
                           {row.rawAlias}
-                        </span>
+                        </code>
                       ) : (
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", fontStyle: "italic" }}>
+                        <span style={{ color: "var(--color-ink-muted)", fontSize: "0.85rem", fontStyle: "italic" }}>
                           (Auto-generate)
                         </span>
                       )}
                     </td>
                     <td>
                       {row.sanitizedTitle ? (
-                        <span style={{ fontSize: "0.85rem" }}>
+                        <span style={{ fontSize: "0.9rem", color: "var(--color-ink)" }}>
                           {row.sanitizedTitle}
                         </span>
                       ) : (
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>
+                        <span style={{ color: "var(--color-ink-muted)", fontSize: "0.85rem" }}>—</span>
                       )}
                     </td>
                     <td>
                       {row.isValid ? (
-                        <span className="badge badge-active flex items-center gap-1" style={{ fontSize: "0.75rem" }}>
-                          <CheckCircle size={12} />
+                        <span className="badge badge-active flex items-center gap-1" style={{ fontSize: "0.8rem", width: "fit-content" }}>
+                          <CheckCircle size={13} />
                           <span>Valid</span>
                         </span>
                       ) : (
                         <div>
-                          <span className="badge badge-inactive flex items-center gap-1" style={{ fontSize: "0.75rem", marginBottom: "2px" }}>
-                            <AlertCircle size={12} />
+                          <span className="badge badge-disabled flex items-center gap-1" style={{ fontSize: "0.8rem", marginBottom: "4px", width: "fit-content" }}>
+                            <AlertCircle size={13} />
                             <span>Invalid</span>
                           </span>
-                          <div style={{ color: "#fca5a5", fontSize: "0.75rem", maxWidth: "240px" }}>
+                          <div style={{ color: "var(--color-text-danger)", fontSize: "0.8rem", fontWeight: 700, maxWidth: "260px", lineHeight: 1.3 }}>
                             {row.error}
                           </div>
                         </div>

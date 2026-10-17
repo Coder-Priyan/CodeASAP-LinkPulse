@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { LinkItem } from "./LinksTable";
-import { X, Save, Clock, Gauge, Lock, AlertCircle, Globe, Layers, Tag as TagIcon } from "lucide-react";
+import { X, Save, Clock, Gauge, Lock, AlertCircle, Globe, Layers, Tag as TagIcon, Sliders, Copy, Check } from "lucide-react";
+import { buildShortUrl } from "@/lib/utils/short-url";
 
 interface EditLinkModalProps {
   link: LinkItem;
@@ -23,6 +24,8 @@ interface TagOption {
 }
 
 export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const [destinationUrl, setDestinationUrl] = useState(link.destinationUrl);
   const [isActive, setIsActive] = useState(link.isActive);
   const [disabledReason, setDisabledReason] = useState(link.disabledReason || "");
@@ -44,8 +47,13 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+
     fetch("/api/campaigns")
       .then((res) => res.json())
       .then((data) => setCampaigns(data.campaigns || []))
@@ -55,9 +63,59 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
       .then((res) => res.json())
       .then((data) => setTags(data.tags || []))
       .catch(() => {});
-  }, []);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (e.key === "Tab" && modalRef.current) {
+        const focusables = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+
+        const firstElement = focusables[0];
+        const lastElement = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const timer = setTimeout(() => {
+      const firstInput = modalRef.current?.querySelector<HTMLElement>("input, button");
+      firstInput?.focus();
+    }, 50);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      clearTimeout(timer);
+      previousFocusRef.current?.focus();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const shortUrl = buildShortUrl(link.code);
+
+  const handleCopyShortUrl = () => {
+    navigator.clipboard.writeText(shortUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const toggleTag = (id: string) => {
     setSelectedTagIds((prev) =>
@@ -98,7 +156,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Error saving link rules.");
+        setError("An error occurred while saving link rules.");
       }
     } finally {
       setLoading(false);
@@ -107,53 +165,48 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
 
   return (
     <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.75)",
-        backdropFilter: "blur(4px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 100,
-        padding: "1rem",
-      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-link-title"
+      className="modal-backdrop"
     >
-      <div
-        className="card"
-        style={{
-          width: "100%",
-          maxWidth: "560px",
-          maxHeight: "90vh",
-          overflowY: "auto",
-          backgroundColor: "var(--bg-secondary)",
-          border: "1px solid var(--border-color)",
-        }}
-      >
-        <div className="flex items-center justify-between" style={{ marginBottom: "1.25rem" }}>
+      <div ref={modalRef} className="modal" style={{ maxWidth: "580px", textAlign: "left" }}>
+        <div className="modal-header">
           <div>
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 700 }}>Edit Link Rules & Organization</h2>
-            <span style={{ fontSize: "0.85rem", color: "var(--accent-secondary)", fontFamily: "monospace" }}>
-              /{link.code}
-            </span>
+            <h2 id="edit-link-title" className="modal-title flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
+              <span className="icon-chip icon-chip-blue">
+                <Sliders size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
+              </span>
+              <span>Edit Link Rules</span>
+            </h2>
+            <div className="flex items-center gap-2" style={{ marginTop: "0.35rem" }}>
+              <code className="code-badge">/{link.code}</code>
+              <button
+                type="button"
+                onClick={handleCopyShortUrl}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: "0.15rem 0.45rem", fontSize: "0.75rem", minHeight: "auto" }}
+                title="Copy short link"
+              >
+                {copied ? <Check size={12} strokeWidth={2.5} /> : <Copy size={12} />}
+                <span>{copied ? "Copied" : "Copy"}</span>
+              </button>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="btn btn-secondary btn-sm"
-            style={{ padding: "0.25rem 0.5rem" }}
+            className="modal-close"
+            aria-label="Close edit modal"
           >
-            <X size={16} />
+            <X size={18} strokeWidth={2.5} />
           </button>
         </div>
 
         {error && (
-          <div className="alert alert-error">
-            <AlertCircle size={16} />
+          <div className="alert alert-error" role="alert" style={{ marginBottom: "1.25rem" }}>
+            <AlertCircle size={18} />
             <span>{error}</span>
           </div>
         )}
@@ -162,7 +215,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
           {/* Destination URL */}
           <div className="form-group">
             <label className="form-label flex items-center gap-2" htmlFor="editDest">
-              <Globe size={14} />
+              <Globe size={16} />
               <span>Destination URL</span>
             </label>
             <input
@@ -175,10 +228,68 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
             />
           </div>
 
+          {/* Active Status Tactile Toggle Switch */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0.85rem 1rem",
+              borderRadius: "var(--radius-md)",
+              backgroundColor: "var(--color-paper)",
+              border: "var(--border-thick)",
+              boxShadow: "var(--shadow-hard-sm)",
+              marginBottom: "1.25rem",
+              gap: "1rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "0.95rem", fontWeight: 700 }}>Redirect Status</div>
+              <div style={{ fontSize: "0.825rem", color: "var(--color-muted)", fontWeight: 600 }}>
+                {isActive ? "Link actively redirects visitors" : "Link is temporarily deactivated"}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsActive(true)}
+                className={`btn btn-sm ${isActive ? "btn-primary" : "btn-secondary"}`}
+                style={{ padding: "0.35rem 0.75rem", fontSize: "0.825rem", minHeight: "36px" }}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsActive(false)}
+                className={`btn btn-sm ${!isActive ? "btn-danger" : "btn-secondary"}`}
+                style={{ padding: "0.35rem 0.75rem", fontSize: "0.825rem", minHeight: "36px" }}
+              >
+                Disabled
+              </button>
+            </div>
+          </div>
+
+          {!isActive && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="editReason">
+                Deactivation Reason (Optional)
+              </label>
+              <input
+                id="editReason"
+                type="text"
+                className="form-input"
+                placeholder="e.g. Campaign concluded"
+                value={disabledReason}
+                onChange={(e) => setDisabledReason(e.target.value)}
+              />
+            </div>
+          )}
+
           {/* Campaign Selection */}
           <div className="form-group">
             <label className="form-label flex items-center gap-2" htmlFor="editCamp">
-              <Layers size={14} />
+              <Layers size={16} />
               <span>Assigned Campaign</span>
             </label>
             <select
@@ -199,10 +310,10 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
           {/* Tags Selection */}
           <div className="form-group">
             <label className="form-label flex items-center gap-2">
-              <TagIcon size={14} />
+              <TagIcon size={16} />
               <span>Assigned Tags</span>
             </label>
-            <div className="flex gap-1" style={{ flexWrap: "wrap", marginTop: "0.25rem" }}>
+            <div className="flex gap-1.5" style={{ flexWrap: "wrap", marginTop: "0.35rem" }}>
               {tags.map((t) => {
                 const isSelected = selectedTagIds.includes(t.id);
                 return (
@@ -210,73 +321,22 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
                     type="button"
                     key={t.id}
                     onClick={() => toggleTag(t.id)}
-                    style={{
-                      padding: "0.25rem 0.6rem",
-                      borderRadius: "999px",
-                      fontSize: "0.75rem",
-                      cursor: "pointer",
-                      border: isSelected ? "1px solid var(--accent-secondary)" : "1px solid var(--border-color)",
-                      backgroundColor: isSelected ? "rgba(6, 182, 212, 0.2)" : "rgba(255, 255, 255, 0.04)",
-                      color: isSelected ? "#67e8f9" : "var(--text-secondary)",
-                    }}
+                    className={`tag-pill ${isSelected ? "selected" : ""}`}
                   >
-                    {isSelected ? `✓ ${t.name}` : t.name}
+                    {isSelected ? `✓ #${t.name}` : `#${t.name}`}
                   </button>
                 );
               })}
               {tags.length === 0 && (
-                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>No tags available.</span>
+                <span style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>No tags created yet.</span>
               )}
             </div>
           </div>
 
-          {/* Active Status Toggle */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "0.75rem",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid var(--border-color)",
-              marginBottom: "1rem",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Active Status</div>
-              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                {isActive ? "Link actively accepts and redirects visitors" : "Link is disabled and blocked from redirecting"}
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              style={{ width: "1.2rem", height: "1.2rem", cursor: "pointer" }}
-            />
-          </div>
-
-          {!isActive && (
-            <div className="form-group">
-              <label className="form-label" htmlFor="editReason">
-                Deactivation Reason (Optional)
-              </label>
-              <input
-                id="editReason"
-                type="text"
-                className="form-input"
-                placeholder="e.g. Campaign ended"
-                value={disabledReason}
-                onChange={(e) => setDisabledReason(e.target.value)}
-              />
-            </div>
-          )}
-
           {/* Expiration Date */}
           <div className="form-group">
             <label className="form-label flex items-center gap-2" htmlFor="editExpiry">
-              <Clock size={14} />
+              <Clock size={16} />
               <span>Expiration Date (Leave blank to remove)</span>
             </label>
             <input
@@ -291,7 +351,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
           {/* Click Limit */}
           <div className="form-group">
             <label className="form-label flex items-center gap-2" htmlFor="editLimit">
-              <Gauge size={14} />
+              <Gauge size={16} />
               <span>Click Limit (Leave blank for unlimited)</span>
             </label>
             <input
@@ -299,17 +359,17 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
               type="number"
               min="1"
               className="form-input"
-              placeholder="e.g. 100"
+              placeholder="e.g. 500"
               value={clickLimit}
               onChange={(e) => setClickLimit(e.target.value)}
             />
-            <span className="form-hint">Current clicks recorded: {link.clicksCount}</span>
+            <span className="form-hint">Recorded visits so far: {link.clicksCount}</span>
           </div>
 
           {/* Password Protection */}
-          <div className="form-group" style={{ marginBottom: "1.5rem" }}>
+          <div className="form-group" style={{ marginBottom: "1.75rem" }}>
             <label className="form-label flex items-center gap-2" htmlFor="editPass">
-              <Lock size={14} />
+              <Lock size={16} />
               <span>Passcode Protection</span>
             </label>
             {link.hasPassword && (
@@ -317,10 +377,11 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
                 <input
                   type="checkbox"
                   id="removePassCheck"
+                  className="form-checkbox"
                   checked={removePassword}
                   onChange={(e) => setRemovePassword(e.target.checked)}
                 />
-                <label htmlFor="removePassCheck" style={{ fontSize: "0.85rem", color: "var(--danger)" }}>
+                <label htmlFor="removePassCheck" style={{ fontSize: "0.85rem", color: "var(--color-text-danger)", fontWeight: 700 }}>
                   Remove current passcode requirement
                 </label>
               </div>
@@ -339,7 +400,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem" }}>
             <button type="button" onClick={onClose} className="btn btn-secondary" disabled={loading}>
               Cancel
             </button>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Neo-brutalist background tile -->
+  <rect x="2" y="2" width="28" height="28" rx="7" fill="#0F5C5C" stroke="#14272B" stroke-width="2.5" />
+  <!-- Shadow offset accent inside icon -->
+  <rect x="5" y="5" width="22" height="22" rx="4" fill="#FBF7EF" stroke="#14272B" stroke-width="1.5" />
+  <!-- Pulse Waveform -->
+  <path d="M7 16 L11 16 L13 10 L17 22 L20 13 L22 16 L25 16" fill="none" stroke="#14272B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- Accent Pulse Dot -->
+  <circle cx="20" cy="13" r="2.5" fill="#F4C95D" stroke="#14272B" stroke-width="1.5" />
+</svg>

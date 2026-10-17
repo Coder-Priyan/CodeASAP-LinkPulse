@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Lock, ArrowRight, AlertCircle, Shield } from "lucide-react";
+import { Lock, ArrowRight, AlertCircle, Shield, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
 function PasswordChallengeContent() {
@@ -13,8 +13,13 @@ function PasswordChallengeContent() {
   const src = searchParams.get("src") || undefined;
 
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = "Protected Link | LinkPulse";
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +43,7 @@ function PasswordChallengeContent() {
 
       if (!res.ok) {
         if (data.status === "BLOCKED" || data.status === "DISABLED" || data.status === "EXPIRED" || data.status === "LIMIT_REACHED") {
-          router.push(`/link-status?code=${encodeURIComponent(code)}&status=${data.status}&reason=${encodeURIComponent(data.error || "")}`);
+          router.push(`/link-status?code=${encodeURIComponent(code)}&status=${data.status}`);
           return;
         }
         throw new Error(data.error || "Incorrect password.");
@@ -60,35 +65,36 @@ function PasswordChallengeContent() {
   };
 
   return (
-    <div className="container" style={{ maxWidth: "480px", paddingTop: "5rem" }}>
+    <div className="container" style={{ maxWidth: "480px", paddingTop: "4.5rem", paddingBottom: "3rem" }}>
       <div className="card" style={{ textAlign: "center" }}>
         <div
           style={{
             width: "56px",
             height: "56px",
-            borderRadius: "var(--radius-md)",
-            background: "rgba(59, 130, 246, 0.15)",
-            border: "1px solid rgba(59, 130, 246, 0.3)",
+            borderRadius: "50%",
+            backgroundColor: "var(--color-yellow)",
+            border: "2px solid var(--color-ink)",
+            boxShadow: "var(--shadow-hard-sm)",
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
             marginBottom: "1.25rem",
           }}
         >
-          <Lock size={26} color="var(--accent-primary)" />
+          <Lock size={26} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
         </div>
 
-        <h1 style={{ fontSize: "1.6rem", fontWeight: 700, marginBottom: "0.4rem" }}>
+        <h1 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: "0.4rem", fontFamily: "var(--font-display)" }}>
           Password Protected Link
         </h1>
 
-        <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
-          The link <code style={{ color: "var(--accent-secondary)", fontWeight: 600 }}>/{code}</code> requires
+        <p style={{ color: "var(--color-ink-muted)", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
+          The link <code className="code-badge">/{code}</code> requires
           a password before redirecting to its destination.
         </p>
 
         {error && (
-          <div className="alert alert-error" style={{ textAlign: "left" }}>
+          <div className="alert alert-error" style={{ textAlign: "left", marginBottom: "1.25rem" }}>
             <AlertCircle size={18} style={{ flexShrink: 0 }} />
             <span>{error}</span>
           </div>
@@ -99,32 +105,43 @@ function PasswordChallengeContent() {
             <label className="form-label" htmlFor="linkPassword">
               Enter Passcode
             </label>
-            <input
-              id="linkPassword"
-              type="password"
-              className="form-input"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-              autoFocus
-              required
-            />
+            <div className="input-password-wrapper">
+              <input
+                id="linkPassword"
+                type={showPassword ? "text" : "password"}
+                className="form-input"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                autoFocus
+                required
+              />
+              <button
+                type="button"
+                className="btn-toggle-password"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide passcode" : "Show passcode"}
+                title={showPassword ? "Hide passcode" : "Show passcode"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button
             type="submit"
             className="btn btn-primary"
-            style={{ width: "100%", padding: "0.75rem", fontSize: "0.95rem" }}
+            style={{ width: "100%", padding: "0.85rem", fontSize: "1rem", minHeight: "44px" }}
             disabled={loading}
           >
             {loading ? (
               <span>Verifying Passcode...</span>
             ) : (
-              <>
+              <span className="flex items-center justify-center gap-2">
                 <span>Access Destination</span>
-                <ArrowRight size={16} />
-              </>
+                <ArrowRight size={16} strokeWidth={2.5} />
+              </span>
             )}
           </button>
         </form>
@@ -133,21 +150,22 @@ function PasswordChallengeContent() {
           style={{
             marginTop: "1.75rem",
             paddingTop: "1.25rem",
-            borderTop: "1px solid var(--border-color)",
+            borderTop: "1.5px solid var(--color-ink-faint)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "0.4rem",
-            color: "var(--text-muted)",
-            fontSize: "0.8rem",
+            color: "var(--color-ink-muted)",
+            fontSize: "0.85rem",
+            fontWeight: 600,
           }}
         >
-          <Shield size={14} />
-          <span>Passcodes are salted & hashed using bcrypt</span>
+          <Shield size={16} style={{ color: "var(--color-ink)" }} />
+          <span>Passcodes are securely protected</span>
         </div>
 
-        <div style={{ marginTop: "1rem" }}>
-          <Link href="/" style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+        <div style={{ marginTop: "1.25rem" }}>
+          <Link href="/" className="btn btn-secondary btn-sm" style={{ display: "inline-flex", minHeight: "44px" }}>
             &larr; Return to LinkPulse Home
           </Link>
         </div>

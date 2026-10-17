@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Copy,
   Check,
@@ -13,9 +13,17 @@ import {
   Gauge,
   Lock,
   QrCode,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  BarChart2,
+  X,
+  Sparkles,
 } from "lucide-react";
 import { EditLinkModal } from "./EditLinkModal";
 import { QrModal } from "./QrModal";
+import { PulseMascot } from "./PulseMascot";
 import { buildShortUrl } from "@/lib/utils/short-url";
 
 export type ComputedLinkState = "active" | "expired" | "limit_reached" | "disabled";
@@ -57,6 +65,38 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
   const [qrModalLink, setQrModalLink] = useState<LinkItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut listener: press Ctrl+K / Cmd+K or '/' to focus search, Esc to clear
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement as HTMLElement)?.tagName;
+      const isCtrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k";
+      const isSlash = e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(activeTag);
+
+      if (isCtrlK || isSlash) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
+        setSearchQuery("");
+        searchInputRef.current?.blur();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((current) => (current === msg ? null : current));
+    }, 2400);
+  };
 
   const getFullShortUrl = (code: string) => buildShortUrl(code);
 
@@ -64,7 +104,12 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
     const url = getFullShortUrl(code);
     navigator.clipboard.writeText(url);
     setCopiedId(id);
+    showToast(`Copied short link to clipboard: ${url}`);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const toggleRowExpand = (id: string) => {
+    setExpandedRowId((prev) => (prev === id ? null : id));
   };
 
   const handleToggleStatus = async (link: LinkItem) => {
@@ -120,295 +165,736 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   const renderStateBadge = (state: ComputedLinkState) => {
     switch (state) {
       case "active":
-        return <span className="badge badge-active">Active</span>;
+        return (
+          <span className="badge badge-active flex items-center gap-1">
+            <CheckCircle2 size={13} strokeWidth={2.5} />
+            <span>Active</span>
+          </span>
+        );
       case "expired":
-        return <span className="badge badge-inactive">Expired</span>;
+        return (
+          <span className="badge badge-expired flex items-center gap-1">
+            <Clock size={13} strokeWidth={2.5} />
+            <span>Expired</span>
+          </span>
+        );
       case "limit_reached":
-        return <span className="badge badge-inactive">Limit Reached</span>;
+        return (
+          <span className="badge badge-limit-reached flex items-center gap-1">
+            <Gauge size={13} strokeWidth={2.5} />
+            <span>Limit Reached</span>
+          </span>
+        );
       case "disabled":
-        return <span className="badge badge-inactive">Disabled</span>;
+        return (
+          <span className="badge badge-disabled flex items-center gap-1">
+            <Power size={13} strokeWidth={2.5} />
+            <span>Disabled</span>
+          </span>
+        );
       default:
-        return <span className="badge badge-count">Unknown</span>;
+        return (
+          <span className="badge badge-paper flex items-center gap-1">
+            <span>Unknown</span>
+          </span>
+        );
     }
   };
 
+  // Filter links client-side for instant keyboard search
+  const filteredLinks = links.filter((link) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    const matchCode = link.code.toLowerCase().includes(q);
+    const matchDest = link.destinationUrl.toLowerCase().includes(q);
+    const matchTitle = link.title ? link.title.toLowerCase().includes(q) : false;
+    const matchTag = link.tags ? link.tags.some((t) => t.name.toLowerCase().includes(q)) : false;
+    const matchCampaign = link.campaign ? link.campaign.name.toLowerCase().includes(q) : false;
+    return matchCode || matchDest || matchTitle || matchTag || matchCampaign;
+  });
+
   if (links.length === 0) {
     return (
-      <div
-        className="card"
-        style={{
-          textAlign: "center",
-          padding: "3.5rem 1.5rem",
-          color: "var(--text-secondary)",
-        }}
-      >
-        <p style={{ fontSize: "1.1rem", marginBottom: "0.5rem", color: "var(--text-primary)" }}>
-          No shortened links found.
-        </p>
-        <p style={{ fontSize: "0.875rem" }}>
+      <div className="card" style={{ padding: "3rem 2rem", textAlign: "center", backgroundColor: "var(--color-white)" }}>
+        <div style={{ display: "inline-flex", justifyContent: "center", marginBottom: "1.25rem" }}>
+          <PulseMascot mood="happy" size={130} />
+        </div>
+        <h3 style={{ fontSize: "1.75rem", fontFamily: "var(--font-display)", marginBottom: "0.5rem" }}>
+          {isAdminView ? "System Link Directory is Empty" : "Welcome to your Link Cockpit"}
+        </h3>
+        <p style={{ color: "var(--color-muted)", fontSize: "1.05rem", maxWidth: "540px", margin: "0 auto 1.75rem", fontWeight: 600 }}>
           {isAdminView
-            ? "No links have been created in the system yet."
-            : "Enter a URL above to create your first trackable short link!"}
+            ? "No links have been registered by any user in the database yet."
+            : "Shorten long URLs with custom aliases, track real visitor clicks, and generate print-ready QR codes."}
         </p>
+
+        {!isAdminView && (
+          <div className="onboarding-grid" style={{ maxWidth: "800px", margin: "0 auto", textAlign: "left" }}>
+            <div className="onboarding-item">
+              <div className="flex items-center gap-2">
+                <span className="onboarding-num">1</span>
+                <strong style={{ fontSize: "0.95rem" }}>Paste & Shorten</strong>
+              </div>
+              <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: 0 }}>
+                Use the form above to turn any long destination link into a clean slug or memorable alias.
+              </p>
+            </div>
+            <div className="onboarding-item">
+              <div className="flex items-center gap-2">
+                <span className="onboarding-num">2</span>
+                <strong style={{ fontSize: "0.95rem" }}>Grab QR Code</strong>
+              </div>
+              <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: 0 }}>
+                Download vector SVG or PNG QR codes with automatic physical scan attribution tags.
+              </p>
+            </div>
+            <div className="onboarding-item">
+              <div className="flex items-center gap-2">
+                <span className="onboarding-num">3</span>
+                <strong style={{ fontSize: "0.95rem" }}>Inspect Telemetry</strong>
+              </div>
+              <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: 0 }}>
+                Analyze visits, unique human sessions, browsers, devices, and referrers in real time.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <>
-      <div className="table-wrapper">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Short Link</th>
-              <th>Original Destination</th>
-              {isAdminView && <th>Creator</th>}
-              <th>Visits & Uniques</th>
-              <th>Active Rules</th>
-              <th>State</th>
-              <th>Created</th>
-              <th style={{ textAlign: "right" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {links.map((link) => {
-              const shortUrl = getFullShortUrl(link.code);
-              const isCopied = copiedId === link.id;
-              const isLoading = actionLoadingId === link.id;
+      {/* Accessible Live Region for Screen Readers */}
+      <div className="sr-only" aria-live="polite">
+        {toastMessage}
+      </div>
 
-              return (
-                <tr key={link.id}>
-                  {/* Short link */}
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <span
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="toast-notification" role="status">
+          <CheckCircle2 size={18} strokeWidth={2.5} style={{ color: "var(--color-blue)" }} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Desktop Quick-Search Toolbar */}
+      <div
+        className="flex items-center justify-between"
+        style={{ marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}
+      >
+        <div
+          className="flex items-center"
+          style={{ position: "relative", minWidth: "260px", maxWidth: "420px", flex: "1 1 auto" }}
+        >
+          <Search
+            size={16}
+            style={{ position: "absolute", left: "0.85rem", color: "var(--color-muted)", pointerEvents: "none" }}
+          />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search links (Ctrl+K or /)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="form-input"
+            style={{
+              paddingLeft: "2.35rem",
+              paddingRight: "5rem",
+              minHeight: "42px",
+              fontSize: "0.875rem",
+              width: "100%",
+            }}
+            aria-label="Filter links by keyword"
+          />
+          <div style={{ position: "absolute", right: "0.6rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: "0.15rem 0.45rem", fontSize: "0.75rem", minHeight: "auto" }}
+                aria-label="Clear search query"
+              >
+                <X size={12} />
+              </button>
+            ) : (
+              <>
+                <kbd className="kbd-shortcut" title="Press Ctrl+K to search">
+                  Ctrl+K
+                </kbd>
+                <kbd className="kbd-shortcut" title="Or press / to search">
+                  /
+                </kbd>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div style={{ fontSize: "0.85rem", color: "var(--color-muted)", fontWeight: 700 }}>
+          Showing {filteredLinks.length} of {links.length} {links.length === 1 ? "link" : "links"}
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="btn btn-secondary btn-sm"
+              style={{ marginLeft: "0.5rem", padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}
+            >
+              Reset Search
+            </button>
+          )}
+        </div>
+      </div>
+
+      {filteredLinks.length === 0 ? (
+        <div className="card" style={{ padding: "2.5rem 1.5rem", textAlign: "center", backgroundColor: "var(--color-white)" }}>
+          <h4 style={{ fontSize: "1.2rem", marginBottom: "0.4rem" }}>No matching links found</h4>
+          <p style={{ color: "var(--color-muted)", fontSize: "0.9rem", marginBottom: "1rem" }}>
+            No links matched your search &ldquo;{searchQuery}&rdquo;.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="btn btn-secondary btn-sm"
+          >
+            Clear Filter
+          </button>
+        </div>
+      ) : (
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th style={{ width: "42px" }} aria-label="Expand row details" />
+                <th>Short Link</th>
+                <th>Destination URL</th>
+                {isAdminView && <th>Creator</th>}
+                <th>Visits & Uniques</th>
+                <th>Rules</th>
+                <th>State</th>
+                <th className="col-sticky-actions" style={{ textAlign: "right" }}>
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLinks.map((link) => {
+                const shortUrl = getFullShortUrl(link.code);
+                const isCopied = copiedId === link.id;
+                const isLoading = actionLoadingId === link.id;
+                const isExpanded = expandedRowId === link.id;
+
+                // Telemetry metrics
+                const totalClicks = link.clicksCount || 0;
+                const qrScans = link.qrScansCount || 0;
+                const directClicks = Math.max(0, totalClicks - qrScans);
+                const qrScansPct = totalClicks > 0 ? Math.round((qrScans / totalClicks) * 100) : 0;
+                const directClicksPct = totalClicks > 0 ? 100 - qrScansPct : 100;
+
+                return (
+                  <tr key={link.id} className={isExpanded ? "row-expanded" : undefined}>
+                    {/* Expand/Collapse Chevron */}
+                    <td style={{ textAlign: "center", paddingRight: 0 }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleRowExpand(link.id)}
+                        className="btn btn-secondary btn-sm table-icon-btn"
+                        title={isExpanded ? "Collapse telemetry breakdown" : "Expand telemetry breakdown"}
+                        aria-label={isExpanded ? `Collapse details for ${link.code}` : `Expand details for ${link.code}`}
+                        aria-expanded={isExpanded}
+                      >
+                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
+                    </td>
+
+                    {/* Short link + Created Date */}
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <code className="code-badge">/{link.code}</code>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(link.id, link.code)}
+                          className="btn btn-secondary btn-sm table-icon-btn"
+                          title="Copy short link to clipboard"
+                          aria-label="Copy short link"
+                        >
+                          {isCopied ? (
+                            <Check size={14} strokeWidth={2.5} style={{ color: "var(--color-green)" }} />
+                          ) : (
+                            <Copy size={14} />
+                          )}
+                        </button>
+                        <a
+                          href={shortUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-secondary btn-sm table-icon-btn"
+                          title="Open short link"
+                          aria-label="Open short link in new tab"
+                        >
+                          <ArrowUpRight size={14} />
+                        </a>
+                      </div>
+
+                      {(link.campaign || (link.tags && link.tags.length > 0)) && (
+                        <div className="flex items-center gap-1" style={{ flexWrap: "wrap", marginTop: "6px" }}>
+                          {link.campaign && (
+                            <span
+                              style={{
+                                fontSize: "0.75rem",
+                                padding: "0.15rem 0.5rem",
+                                borderRadius: "var(--radius-sm)",
+                                backgroundColor: "var(--color-blue-light)",
+                                border: "1.5px solid var(--color-ink)",
+                                color: "var(--color-ink)",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {link.campaign.name}
+                            </span>
+                          )}
+                          {link.tags?.map((t) => (
+                            <span
+                              key={t.id}
+                              style={{
+                                fontSize: "0.75rem",
+                                padding: "0.15rem 0.5rem",
+                                borderRadius: "var(--radius-sm)",
+                                backgroundColor: "var(--color-paper)",
+                                border: "1.5px solid var(--color-ink)",
+                                color: "var(--color-ink)",
+                                fontWeight: 700,
+                              }}
+                            >
+                              #{t.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div
                         style={{
-                          fontFamily: "monospace",
+                          fontSize: "0.75rem",
+                          color: "var(--color-muted)",
+                          marginTop: "6px",
                           fontWeight: 600,
-                          color: "var(--accent-secondary)",
                         }}
                       >
-                        /{link.code}
-                      </span>
-                      <button
-                        onClick={() => handleCopy(link.id, link.code)}
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: "0.2rem 0.4rem" }}
-                        title="Copy short link"
-                      >
-                        {isCopied ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
-                      </button>
-                      <a
-                        href={shortUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: "0.2rem 0.4rem" }}
-                        title="Open redirect"
-                      >
-                        <ArrowUpRight size={12} />
-                      </a>
-                    </div>
+                        Created{" "}
+                        {new Date(link.createdAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </div>
+                    </td>
 
-                    {(link.campaign || (link.tags && link.tags.length > 0)) && (
-                      <div className="flex items-center gap-1" style={{ flexWrap: "wrap", marginTop: "4px" }}>
-                        {link.campaign && (
+                    {/* Original Destination */}
+                    <td>
+                      <div className="flex items-center gap-1.5" style={{ maxWidth: "260px" }}>
+                        <a
+                          href={link.destinationUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="truncate"
+                          style={{
+                            color: "var(--color-ink)",
+                            fontSize: "0.9rem",
+                            fontWeight: 600,
+                            maxWidth: "235px",
+                          }}
+                          title={link.destinationUrl}
+                        >
+                          <span className="sr-only">Destination URL: {link.destinationUrl}</span>
+                          <span aria-hidden="true">{link.destinationUrl}</span>
+                        </a>
+                        <ExternalLink size={14} style={{ color: "var(--color-muted)", flexShrink: 0 }} />
+                      </div>
+                    </td>
+
+                    {/* Creator (Admin View) */}
+                    {isAdminView && (
+                      <td>
+                        {link.user ? (
+                          <div style={{ maxWidth: "180px" }}>
+                            <div
+                              style={{
+                                fontSize: "0.9rem",
+                                fontWeight: 700,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                color: "var(--color-ink)",
+                              }}
+                              title={`Creator: ${link.user.email} (${link.user.role})`}
+                            >
+                              <span className="sr-only">Creator email: {link.user.email}</span>
+                              <span aria-hidden="true">{link.user.email}</span>
+                            </div>
+                            <div style={{ marginTop: "3px" }}>
+                              {link.user.role === "ADMIN" ? (
+                                <span
+                                  className="badge badge-admin"
+                                  style={{ fontSize: "0.68rem", padding: "0.1rem 0.4rem" }}
+                                >
+                                  Admin
+                                </span>
+                              ) : (
+                                <span
+                                  className="badge badge-user"
+                                  style={{ fontSize: "0.68rem", padding: "0.1rem 0.4rem" }}
+                                >
+                                  User
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: "var(--color-ink-muted)", fontSize: "0.85rem" }}>Unknown</span>
+                        )}
+                      </td>
+                    )}
+
+                    {/* Visits & Unique Visitors */}
+                    <td>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <div
+                          style={{
+                            whiteSpace: "nowrap",
+                            fontWeight: 700,
+                            fontSize: "0.9rem",
+                            color: "var(--color-ink)",
+                          }}
+                        >
+                          {link.clicksCount} {link.clicksCount === 1 ? "visit" : "visits"}
+                        </div>
+                        <div
+                          style={{
+                            whiteSpace: "nowrap",
+                            color: "var(--color-muted)",
+                            fontSize: "0.8rem",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {link.uniqueVisitorsCount} unique
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "var(--color-ink-muted)",
+                            fontWeight: 500,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {link.qrScansCount || 0} QR · {Math.max(0, link.clicksCount - (link.qrScansCount || 0))} direct
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Rules indicators */}
+                    <td>
+                      <div className="flex items-center gap-2">
+                        {link.expiresAt && (
                           <span
-                            style={{
-                              fontSize: "0.7rem",
-                              padding: "0.1rem 0.4rem",
-                              borderRadius: "4px",
-                              backgroundColor: "rgba(59, 130, 246, 0.15)",
-                              color: "#60a5fa",
-                              fontWeight: 500,
-                            }}
+                            className="tooltip-trigger"
+                            tabIndex={0}
+                            aria-label={`Expires: ${new Date(link.expiresAt).toLocaleString()}`}
+                            style={{ color: "var(--color-ink)", display: "inline-flex" }}
                           >
-                            {link.campaign.name}
+                            <Clock size={16} strokeWidth={2.5} />
+                            <span className="tooltip">Expires: {new Date(link.expiresAt).toLocaleDateString()}</span>
                           </span>
                         )}
-                        {link.tags?.map((t) => (
+                        {link.clickLimit !== null && link.clickLimit !== undefined && (
                           <span
-                            key={t.id}
-                            style={{
-                              fontSize: "0.7rem",
-                              padding: "0.1rem 0.4rem",
-                              borderRadius: "4px",
-                              backgroundColor: "rgba(255, 255, 255, 0.05)",
-                              color: "var(--text-muted)",
-                            }}
+                            className="tooltip-trigger"
+                            tabIndex={0}
+                            aria-label={`Limit: ${link.clicksCount}/${link.clickLimit} visits`}
+                            style={{ color: "var(--color-ink)", display: "inline-flex" }}
                           >
-                            #{t.name}
+                            <Gauge size={16} strokeWidth={2.5} />
+                            <span className="tooltip">
+                              Limit: {link.clicksCount}/{link.clickLimit} visits
+                            </span>
                           </span>
-                        ))}
+                        )}
+                        {link.hasPassword && (
+                          <span
+                            className="tooltip-trigger"
+                            tabIndex={0}
+                            aria-label="Passcode protection enabled"
+                            style={{ color: "var(--color-ink)", display: "inline-flex" }}
+                          >
+                            <Lock size={16} strokeWidth={2.5} />
+                            <span className="tooltip">Passcode protected</span>
+                          </span>
+                        )}
+                        {!link.expiresAt && link.clickLimit === null && !link.hasPassword && (
+                          <span style={{ color: "var(--color-muted)", fontSize: "0.85rem" }}>None</span>
+                        )}
                       </div>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* Original Destination */}
-                  <td>
-                    <div className="flex items-center gap-2 max-w-md">
+                    {/* State badge */}
+                    <td>
+                      <div>
+                        {renderStateBadge(link.state)}
+                        {link.disabledReason && link.state === "disabled" && (
+                          <div style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.2rem" }}>
+                            {link.disabledReason}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Actions (Sticky Right) */}
+                    <td className="col-sticky-actions" style={{ textAlign: "right" }}>
+                      <div
+                        className="flex items-center justify-between"
+                        style={{ justifyContent: "flex-end", gap: "0.4rem" }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setQrModalLink(link)}
+                          disabled={isLoading}
+                          className="btn btn-secondary btn-sm"
+                          title="View and download QR code"
+                          aria-label="View QR code"
+                        >
+                          <QrCode size={14} />
+                          <span>QR</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setEditingLink(link)}
+                          disabled={isLoading}
+                          className="btn btn-secondary btn-sm"
+                          title="Edit link rules"
+                          aria-label="Edit link rules"
+                        >
+                          <Sliders size={14} />
+                          <span>Edit</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(link)}
+                          disabled={isLoading}
+                          className={`btn btn-sm ${link.isActive ? "btn-secondary" : "btn-primary"}`}
+                          title={link.isActive ? "Deactivate link" : "Activate link"}
+                          aria-label={link.isActive ? "Deactivate link" : "Activate link"}
+                        >
+                          <Power size={14} />
+                          <span>{link.isActive ? "Disable" : "Enable"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(link.id)}
+                          disabled={isLoading}
+                          className="btn btn-danger btn-sm"
+                          title="Permanently delete link"
+                          aria-label="Delete link"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Expanded Row Inspector Portal (outside table structure to ensure strict HTML validity or inline) */}
+      {expandedRowId && (
+        <div style={{ marginTop: "1rem" }}>
+          {(() => {
+            const expLink = links.find((l) => l.id === expandedRowId);
+            if (!expLink) return null;
+            const expTotalClicks = expLink.clicksCount || 0;
+            const expQrScans = expLink.qrScansCount || 0;
+            const expDirectClicks = Math.max(0, expTotalClicks - expQrScans);
+            const expQrScansPct = expTotalClicks > 0 ? Math.round((expQrScans / expTotalClicks) * 100) : 0;
+            const expDirectClicksPct = expTotalClicks > 0 ? 100 - expQrScansPct : 100;
+
+            return (
+              <div
+                className="card"
+                style={{
+                  backgroundColor: "#FAF6ED",
+                  border: "var(--border-thick)",
+                  padding: "1.25rem 1.5rem",
+                  boxShadow: "var(--shadow-hard)",
+                }}
+              >
+                <div
+                  className="flex items-center justify-between"
+                  style={{ marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="badge badge-paper">
+                      Inspector: <strong>/{expLink.code}</strong>
+                    </span>
+                    <span style={{ fontSize: "0.85rem", color: "var(--color-muted)", fontWeight: 700 }}>
+                      Detailed telemetry breakdown and operational guardrails
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedRowId(null)}
+                    className="btn btn-secondary btn-sm"
+                    aria-label="Close inspector"
+                  >
+                    <X size={14} />
+                    <span>Close Inspector</span>
+                  </button>
+                </div>
+
+                <div className="table-inspector-deck">
+                  {/* Card 1: Destination Details */}
+                  <div className="table-inspector-card">
+                    <div className="table-inspector-label">
+                      <ExternalLink size={13} />
+                      <span>Full Destination Target</span>
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-mono-family)",
+                        fontSize: "0.85rem",
+                        wordBreak: "break-all",
+                        color: "var(--color-ink)",
+                        marginBottom: "0.85rem",
+                        maxHeight: "65px",
+                        overflowY: "auto",
+                      }}
+                    >
+                      {expLink.destinationUrl}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(expLink.destinationUrl);
+                          showToast("Copied destination target URL to clipboard!");
+                        }}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        <Copy size={13} />
+                        <span>Copy Target</span>
+                      </button>
                       <a
-                        href={link.destinationUrl}
+                        href={expLink.destinationUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="truncate"
-                        style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}
-                        title={link.destinationUrl}
+                        className="btn btn-secondary btn-sm"
                       >
-                        {link.destinationUrl}
+                        <ExternalLink size={13} />
+                        <span>Visit</span>
                       </a>
-                      <ExternalLink size={12} color="var(--text-muted)" style={{ flexShrink: 0 }} />
                     </div>
-                  </td>
+                  </div>
 
-                  {/* Creator (Admin View) */}
-                  {isAdminView && (
-                    <td>
-                      {link.user ? (
-                        <div>
-                          <div style={{ fontSize: "0.85rem", fontWeight: 500 }}>
-                            {link.user.email}
-                          </div>
-                          <span className="badge badge-admin" style={{ fontSize: "0.65rem", marginTop: "2px" }}>
-                            {link.user.role}
-                          </span>
-                        </div>
-                      ) : (
-                        <span style={{ color: "var(--text-muted)" }}>Unknown</span>
-                      )}
-                    </td>
-                  )}
-
-                  {/* Visits & Unique Visitors */}
-                  <td>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                      <div className="flex items-center gap-2">
-                        <span className="badge badge-count" title="Total visits">
-                          {link.clicksCount} {link.clicksCount === 1 ? "visit" : "visits"}
-                        </span>
+                  {/* Card 2: Telemetry Breakdown Bar */}
+                  <div className="table-inspector-card">
+                    <div className="table-inspector-label">
+                      <BarChart2 size={13} />
+                      <span>Attribution Ratio</span>
+                    </div>
+                    <div
+                      className="breakdown-bar-track"
+                      role="progressbar"
+                      aria-valuenow={expDirectClicksPct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Attribution ratio"
+                    >
+                      <div
+                        className="breakdown-bar-segment-direct"
+                        style={{ width: `${expDirectClicksPct}%` }}
+                        title={`Direct/Web Visits: ${expDirectClicks} (${expDirectClicksPct}%)`}
+                      />
+                      <div
+                        className="breakdown-bar-segment-qr"
+                        style={{ width: `${expQrScansPct}%` }}
+                        title={`QR Code Scans: ${expQrScans} (${expQrScansPct}%)`}
+                      />
+                    </div>
+                    <div
+                      className="flex items-center justify-between"
+                      style={{ fontSize: "0.8rem", fontWeight: 700, marginTop: "0.45rem" }}
+                    >
+                      <div className="flex items-center gap-1.5">
                         <span
                           style={{
-                            fontSize: "0.775rem",
-                            color: "var(--text-muted)",
+                            display: "inline-block",
+                            width: "10px",
+                            height: "10px",
+                            borderRadius: "2px",
+                            backgroundColor: "var(--color-blue)",
                           }}
-                          title="Unique privacy-safe visitors"
-                        >
-                          ({link.uniqueVisitorsCount} unique)
+                        />
+                        <span>
+                          Direct: {expDirectClicks} ({expDirectClicksPct}%)
                         </span>
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                        <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>
-                          {link.qrScansCount || 0} QR
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: "10px",
+                            height: "10px",
+                            borderRadius: "2px",
+                            backgroundColor: "var(--color-yellow)",
+                          }}
+                        />
+                        <span>
+                          QR Scans: {expQrScans} ({expQrScansPct}%)
                         </span>
-                        {" · "}
-                        {Math.max(0, link.clicksCount - (link.qrScansCount || 0))} other
                       </div>
                     </div>
-                  </td>
+                  </div>
 
-                  {/* Rules indicators */}
-                  <td>
-                    <div className="flex items-center gap-2">
-                      {link.expiresAt && (
-                        <span
-                          title={`Expires: ${new Date(link.expiresAt).toLocaleString()}`}
-                          style={{ color: "#fcd34d", display: "inline-flex" }}
-                        >
-                          <Clock size={15} />
-                        </span>
-                      )}
-                      {link.clickLimit !== null && link.clickLimit !== undefined && (
-                        <span
-                          title={`Limit: ${link.clicksCount}/${link.clickLimit} visits`}
-                          style={{ color: "#38bdf8", display: "inline-flex" }}
-                        >
-                          <Gauge size={15} />
-                        </span>
-                      )}
-                      {link.hasPassword && (
-                        <span
-                          title="Passcode protection enabled"
-                          style={{ color: "#c084fc", display: "inline-flex" }}
-                        >
-                          <Lock size={15} />
-                        </span>
-                      )}
-                      {!link.expiresAt && link.clickLimit === null && !link.hasPassword && (
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>None</span>
-                      )}
+                  {/* Card 3: Active Rule Parameters */}
+                  <div className="table-inspector-card">
+                    <div className="table-inspector-label">
+                      <Sliders size={13} />
+                      <span>Active Guardrails</span>
                     </div>
-                  </td>
-
-                  {/* State badge */}
-                  <td>
-                    <div>
-                      {renderStateBadge(link.state)}
-                      {link.disabledReason && link.state === "disabled" && (
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
-                          {link.disabledReason}
-                        </div>
-                      )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "0.85rem" }}>
+                      <div className="flex items-center justify-between">
+                        <span style={{ color: "var(--color-muted)", fontWeight: 600 }}>Expiration:</span>
+                        <strong>
+                          {expLink.expiresAt ? new Date(expLink.expiresAt).toLocaleDateString() : "No Expiration"}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span style={{ color: "var(--color-muted)", fontWeight: 600 }}>Click Limit:</span>
+                        <strong>
+                          {expLink.clickLimit !== null && expLink.clickLimit !== undefined
+                            ? `${expLink.clicksCount} / ${expLink.clickLimit} max`
+                            : "Unlimited"}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span style={{ color: "var(--color-muted)", fontWeight: 600 }}>Passcode Protection:</span>
+                        <strong>{expLink.hasPassword ? "Enforced" : "None"}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span style={{ color: "var(--color-muted)", fontWeight: 600 }}>Unique Visitors:</span>
+                        <strong>{expLink.uniqueVisitorsCount} sessions</strong>
+                      </div>
                     </div>
-                  </td>
-
-                  {/* Created Date */}
-                  <td style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                    {new Date(link.createdAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </td>
-
-                  {/* Actions */}
-                  <td style={{ textAlign: "right" }}>
-                    <div className="flex items-center justify-between" style={{ justifyContent: "flex-end", gap: "0.4rem" }}>
-                      <button
-                        onClick={() => setQrModalLink(link)}
-                        disabled={isLoading}
-                        className="btn btn-secondary btn-sm"
-                        title="View and download QR code"
-                      >
-                        <QrCode size={13} />
-                        <span>QR</span>
-                      </button>
-
-                      <button
-                        onClick={() => setEditingLink(link)}
-                        disabled={isLoading}
-                        className="btn btn-secondary btn-sm"
-                        title="Edit link rules (expiry, limit, password, url)"
-                      >
-                        <Sliders size={13} />
-                        <span>Edit</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleToggleStatus(link)}
-                        disabled={isLoading}
-                        className={`btn btn-sm ${link.isActive ? "btn-secondary" : "btn-primary"}`}
-                        title={link.isActive ? "Deactivate link" : "Activate link"}
-                      >
-                        <Power size={13} />
-                        <span>{link.isActive ? "Disable" : "Enable"}</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleDelete(link.id)}
-                        disabled={isLoading}
-                        className="btn btn-danger btn-sm"
-                        title="Permanently delete link"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {editingLink && (
         <EditLinkModal

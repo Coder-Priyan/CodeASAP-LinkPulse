@@ -1,5 +1,112 @@
 # LinkPulse Devlog
 
+### 2026-10-17 — Desktop Redesign Round 3 (Comprehensive Pass, ESLint & Truth In Copy)
+- **What**: Executed Round 3 across all surfaces not covered or only partially touched in earlier rounds:
+  - Redesign Pass:
+    - Navbar: Responsive touch targets, clean session chip, role badges (`Admin` vs `User`), accessible aria-labels.
+    - Footer: Complete desktop neo-brutalist footer (`.footer-neo`) featuring brand deck, v1.2.0 badge, live telemetry engine status pill, navigation links, and domain safety badge.
+    - Modals (EditLinkModal, QrModal): Upgraded `EditLinkModal` with a tactile short link copy badge in header, toggle button switch for Active vs. Disabled, and high-contrast form fields. Upgraded `QrModal` with tactile copy button, high-res SVG vector vs. PNG download badges, and non-technical copy.
+    - Analytics & Admin: Added instant client-side domain search filter in the Admin domain blocklist with live count badge; preserved chart clarity and calm data.
+    - Auth & Error Pages: Implemented real-time 4-segment neo-brutalist Password Strength Meter on `/register` (Too short, Fair, Good, Strong) with character count; added password reveal toggle (`Eye`/`EyeOff`) on passcode challenge page `/p/[code]`.
+  - LinksTable Parity Audit: Diffed `LinksTable.tsx` against `git HEAD`. Confirmed zero lost functionality: all tags, campaigns, admin email display, visit/unique/QR counts, rule indicators, active/disabled toggling, delete with confirmation, and modals (Edit, QR) are preserved. In addition, real-time client-side search, row expansion, and keyboard shortcuts (`Ctrl+K` and `/`) were added.
+  - ESLint Setup: Created `.eslintrc.json` with `{"extends": "next/core-web-vitals"}` and installed compatible versions (`eslint@^8.57.0`, `eslint-config-next@15.2.1`). `npm run lint` executes non-interactively with exit code 0 (`✔ No ESLint warnings or errors`).
+  - Pre-existing Test Failures Audit: Stashed working tree and ran tests against untouched `HEAD`. Proved identically that the 7 test suites fail due to a live Neon DB row in `BlockedDomain` where `reason = "Manual Test"` blocking `example.com`. Popped stash cleanly.
+  - Truth in Copy & Developer Hint Cleanup: Replaced "0 3rd-Party Trackers" with "1,120 Direct Clicks" on landing hero; removed all occurrences of developer query hints (`?src=qr`) from user-facing copy on landing, QR modal, analytics, and dashboard; replaced "Self-hosted" with "Built-in" on login.
+- **Why**: Deliver an uncompromising, desktop-first experience that is truthful to what the software actually does, rigorously tested and linted, with maximum keyboard and visual polish.
+- **Requirement**: Round 3 desktop redesign on branch `ui-polish`. Desktop only ($\ge 1024\text{px}$), no mobile breakage, no changes to business logic/routes/APIs/schema, no commits or pushes.
+- **Next**: Final report presentation and user sign-off.
+
+### 2026-10-17 — Desktop Redesign Round 2 (Productivity, Inspection & Truthful Telemetry)
+- **What**: Executed Round 2 of the desktop redesign ($\ge 1024\text{px}$), keeping the core "Professional, Mature & Playful" thesis while auditing every desktop screen/component, upgrading user experience, and enforcing strict honesty rules:
+  - Honesty Rule Alignment: Replaced claims of "zero tracking" with accurate descriptions of first-party visit, referrer, and device telemetry without third-party ad networks or cookies across landing and login views. Labeled the desktop interactive simulator explicitly as `Interactive Demo (Sample Data)`. Dynamically computed short URLs via `buildShortUrl()` rather than hardcoding domains.
+  - Keyboard Quick Search (`/` or `Ctrl+K`): Added desktop shortcut listener to instantly focus the link filter input, with an `Esc` shortcut to clear and blur, real-time client-side filtering across code/title/URL/tags, and dynamic count badges.
+  - Interactive Table Row Inspector: Added expandable telemetry inspection drawers (`.table-inspector-deck`) to the links table, featuring an attribution ratio bar comparing direct web clicks to physical QR scans, detailed operational guardrails (exact expiry dates, limit utilization progress), and full target URL copy affordances.
+  - Mascot Empty State & Onboarding: Upgraded the empty links view with mascot "Pulse" in `mood="happy"` presenting an interactive 3-step Quick-Start Guide, alongside non-intrusive desktop productivity tip banners.
+  - Real-Time Toast & Inline Feedback: Implemented a neo-brutalist floating toast alert (`.toast-notification`) for clipboard copy events, paired with an accessible `aria-live="polite"` screen-reader region.
+  - CSV Bulk Import Polish: Added active dragover states (`.upload-dropzone.dragover`) for file drag-and-drop, a one-click "Load Sample CSV" action for zero-friction testing, and token cleanup (`icon-chip-blue`).
+- **Why**: Solidify LinkPulse as a responsive, delightfully tactile power tool for desktop users that never misrepresents its features, while drastically reducing navigation friction.
+- **Requirement**: Round 2 of Desktop Redesign on branch `ui-polish`. Desktop only ($\ge 1024\text{px}$), no mobile breakage, presentation only (no logic, routes, API, Prisma, or data flow changes), no commits or pushes.
+- **Next**: Run verification commands (tsc, next build, vitest, contrast check) and compile final comprehensive report.
+
+### 2026-10-17 — Major Desktop Redesign Pass (Professional, Mature & Playful)
+- **What**: Executed a major desktop-focused ($\ge 1024\text{px}$) redesign balancing professional credibility, mature restraint, and playful character:
+  - Landing Hero & Telemetry Simulator: Added mascot speech bubble companion (`"Fast redirects. Clear click telemetry."`) and an interactive product showcase card modeling a live link with real-time stats pills, active status, and rule indicators. Added 3 feature pillar cards with custom chips.
+  - Split Desktop Authentication: Redesigned `/login` and `/register` into a dual-column desktop experience with a characterful brand companion panel on the left and high-contrast form on the right (collapsing gracefully on screens $< 1024\text{px}$).
+  - Semantic Stat Card Accents: Added 4px semantic top borders (`.stat-card-teal`, `.stat-card-butter`, `.stat-card-sage`, `.stat-card-coral`) with subtle hover elevation on dashboard, admin, and analytics.
+  - Telemetry Chart Deck & Top Links: Added peak traffic badge on Clicks Over Time chart and visual rank badges (`#1`, `#2`, `#3`) to the top performing links table in analytics.
+  - Live Creation Preview: Integrated instant monospace short URL preview chip (`Preview: /launch-2026`) in `LinkCreateForm`.
+  - 404 Action Flow: Provided both "Return Home" and "Go to Dashboard" on not-found error page.
+- **Why**: Move LinkPulse from a basic MVP or generic template into an authoritative, distinctive, character-rich product that feels serious enough for production infrastructure yet memorable and delightful.
+- **Requirement**: Desktop redesign pass on branch `ui-polish`. No logic changes, no database touches, no git commits/pushes.
+- **Next**: Verify build and type checks, document computed contrast and test coverage.
+
+### 2026-10-17 — UI/UX Production Polish & Accessibility Standards Audit
+- **What**: Senior UI/UX engineering overhaul across all views, shared modals, data tables, and mobile viewports:
+  - Responsive Grid Containment: Replaced fixed `minmax(360px, 1fr)` with `minmax(min(100%, 280px), 1fr)` on analytics breakdown cards to guarantee zero horizontal overflow at 360px.
+  - Touch Target Hardening ($\ge 44\text{px}$): Removed inline sub-44px height overrides from admin unblock buttons, passcode challenge return buttons, inline tag/campaign "+ New" buttons, and table action buttons, introducing `.table-icon-btn` with responsive 44px touch targets on mobile touchscreens.
+  - Mobile Navigation Drawer Alignment: Updated mobile drawer cluster styles so user chips span full-width without desktop 220px max-width clamping, and logout buttons stretch symmetrically.
+  - Table Action Affordances: Standardized icon button touch areas across link copy and direct open actions in `LinksTable`.
+- **Why**: Bring LinkPulse to an uncompromising, production-ready level of visual finish, keyboard/touch accessibility, and rock-solid responsiveness from 360px up.
+- **Requirement**: Autonomous Senior UI/UX Engineer pass on branch `ui-polish`. Presentation only, no logic/API changes, zero database touches, no git commits/pushes.
+- **Next**: Verify build and type checks, document verification commands and screens.
+
+### 2026-10-17 — UI Polish: Responsive & Accessibility Refinements
+- **What**: Conducted comprehensive review across all views and shared components:
+  - Landing page: defined responsive hero typography (`.hero-title`, `.hero-desc`), stacked mobile CTA buttons, and styled feature step cards (`.step-card`, `.step-title`, `.step-desc`).
+  - Mobile overflow: enforced `overflow-x: hidden` on `html, body` to prevent sideways viewport scroll from 360px up while preserving table horizontal scroll containers.
+  - Stepper: made `.stepper` fully responsive on narrow viewports ($\le 640\text{px}$) by scaling circles and hiding the rigid horizontal line.
+  - Touch targets: increased `.btn-toggle-password` to 38x38px and `.tag-pill` / `.btn-sm` to 44px min-height on mobile.
+  - Icon chips & headings: unified heading icon chips across `LinkCreateForm`, `EditLinkModal`, `QrModal`, and `CsvImportPage`, replacing naked colored strokes with ink icons on token chips.
+  - Accessibility: enhanced `@media (prefers-reduced-motion: reduce)` to explicitly suppress `.spin` animations and transforms.
+- **Why**: Deliver consistent tactile neo-brutalist delight without cramped elements, awkward line wrapping, or touch target accessibility violations on small screens.
+- **Requirement**: Review the whole UI as a senior product designer and front-end developer, make high-impact improvements, and verify across 360px, 768px, and desktop widths.
+
+- **Why**: Deliver a calm, professional, and mature visual aesthetic suited for telemetry and analytics while maintaining tactile neo-brutalist physical affordances. Ensure all text and UI elements meet or exceed WCAG AA contrast standards ($\ge 4.5:1$ for normal text, $\ge 3:1$ for graphical objects and borders).
+- **How**:
+  - Tokens: Updated variables in `src/app/globals.css`: `--color-ink` (`#14272B`), `--color-paper` (`#FBF7EF`), `--color-blue` (`#0F5C5C`, deep teal), `--color-blue-light` (`#D9EDE6`), `--color-yellow` (`#F4C95D`, butter), `--color-yellow-light` (`#FBF0CF`), `--color-coral` (`#E8806A`), `--color-coral-light` (`#FAE3DC`), `--color-green` (`#A5D6A0`), `--color-green-light` (`#E6F2E1`), `--color-muted` (`#4F6266`), `--color-ink-muted` (`#46585C`), `--color-ink-faint` (`#D8D3C5`), `--color-text-blue` (`#0F5C5C`), and `--on-primary` (`#FFFFFF`).
+  - Text on Teal: Configured `.btn-primary`, `.brand-icon`, and icon badges on deep teal to use high-contrast `--on-primary` (`#FFFFFF`) with 7.69:1 contrast ratio.
+  - Focus Ring: Applied `3px solid var(--color-text-blue)` with `2px` offset on `:focus-visible` and form inputs while retaining ink borders.
+  - SVG Recoloring: Updated `PulseMascot.tsx` and `src/app/icon.svg` with deep teal body, butter ear nubs, coral antenna orb, and sage belly screen without altering SVG geometry or path shapes.
+  - Documentation: Updated token references and component styling in `docs/DESIGN.md`. Verified with `npx tsc --noEmit` and production build.
+- **Requirement**: UI round 5 for LinkPulse: COLOR PALETTE CHANGE ONLY on branch `ui-polish`. No logic changes, no database touches, no commits or pushes.
+- **Next**: Final review and stakeholder demonstration.
+
+### 2026-10-17 — UI Round 3.1: Verification & Cleanup
+- **What**: Performed verification and cleanup of UI polish branch: regex validation of code query parameter on `/link-status`, modal focus restoration, ink outlines on telemetry charts, and accessibility contrast pass.
+- **Why**: Ensure complete WCAG AA compliance, zero logic divergence, and stable production build.
+
+### 2026-10-17 — UI Round 3: Analytics, Admin Console & Accessibility Pass
+- **What**: Completed the neo-brutalist design rollout across the remaining data and governance pages (Analytics telemetry dashboard, Admin console, Domain blocklist management, and Protected link challenge page). Conducted an application-wide accessibility and consistency audit. Eliminated user-supplied `reason` query string rendering on `/link-status` in favor of fixed friendly status messages. Added modal `Esc` key closing and focus trapping, plain page titles, an original SVG favicon, and a centralized `.sr-only` utility for screen reader table alternatives on charts.
+- **Why**: Deliver cohesive visual polish and full keyboard/screen-reader accessibility across all platform features. Ensure charts are readable without hovering and color-blind safe, guarantee multi-tenant creator emails are never cut off, and protect the public status page against arbitrary text reflection.
+- **How**:
+  - Analytics: Upgraded period tabs, stat cards, flat palette clicks-over-time bar chart with directly visible numeric values and visually hidden `.sr-only` table alternative, device/browser/referrer breakdown progress bars, and operational alerts pairing icons with words.
+  - Admin Console: Styled admin sticker badge, multi-tenant stats, blocked domain form with inline alerts, domain safety table with subdomain rules and unblock confirmation, and wrapped creator emails with break-all, tooltips, and screen reader labels.
+  - Status Page Security: Stopped rendering query param `reason` entirely; mapped fixed friendly messages for `EXPIRED`, `DISABLED`, `LIMIT_REACHED`, `BLOCKED`, and `PASSWORD`.
+  - Modals: Implemented keyboard focus trapping and `Esc` key event listeners in `EditLinkModal` and `QrModal`.
+  - Branding & Consistency: Created `src/app/icon.svg` neo-brutalist brand favicon; added plain descriptive page titles across client views; replaced 68+ remaining legacy colors/alphas with design tokens. Verified with `npx tsc --noEmit` (0 errors) and Next.js production build (28 routes).
+- **Requirement**: UI round 3 for LinkPulse: apply design system to analytics page, admin console, and finish with consistency and accessibility pass on branch `ui-polish`. Presentation only, except for status page reason parameter removal.
+- **Next**: Reviewer manual audit on desktop, 768px, and 360px viewports.
+
+### 2026-10-17 — UI Round 2: Dashboard, Data Pages, Modals & Import Polish
+- **What**: Extended the neo-brutalist design system across all user-facing data surfaces: the dashboard stats cards, the two-step link creation wizard, the links table, edit and QR code modals, and the CSV bulk import workflow. Enforced "The One Rule: Playful shell, calm data" so all numbers, forms, tables, and codes remain legible ($\ge 14\text{px}$, contrast $\ge 4.5:1$, monospace codes, thin lines, no rotation, no row shadows). Status indicators strictly pair words and icons with color. The mascot "Pulse" appears exclusively in the empty state.
+- **Why**: Bring visual consistency and tactile neo-brutalist delight to the core operational experience while keeping the data calm, professional, and accessible. Replace unreadable light-on-light colors and dark-mode artifacts with light paper tokens.
+- **How**:
+  - Stat cards: Styled using `.stat-card` with 2.5px solid borders, 4px shadows, high-contrast labels, and `Lilita One` metric values.
+  - Two-Step Wizard: Added responsive `.stepper` indicator, unified form inputs, redesigned rule drawers and tag selector, and high-contrast success card with instant 2-second visual feedback for short URL copying.
+  - Links Table: Embedded inside responsive horizontal scrolling `.table-wrapper`, clean rows, monospace `.code-badge` with instant copy feedback, and sticker badges pairing icons and words (`Active`, `Disabled`, `Expired`, `Limit Reached`, `Blocked`). Empty state cleanly displays "Pulse" in `thinking` mood.
+  - Modals: Replaced blurred overlays with solid neo-brutalist `.modal-backdrop`, `.modal` dialogs with 6px offset shadows, accessible 44px close buttons, and responsive 360px layout.
+  - CSV Import: Upgraded upload dropzone with dashed border and hover lift, replaced low-contrast alerts with `.alert-error` and `.card-green`, and styled preview table with per-row validation badges.
+  - Replaced over 65 hardcoded hex/rgba styles and blurred backdrops with centralized design tokens. Verified with `npx tsc --noEmit` and production build verification.
+- **Requirement**: Apply the new design system to the dashboard and data pages on branch `ui-polish`. Presentation only; do not change business logic, API routes, or tests.
+- **Next**: Final reviewer visual audit across desktop, 768px, and 360px viewports.
+
+### 2026-10-17 — UI Round 1: Playful Neo-Brutalist Visual Design System
+- **What**: Designed and implemented a playful, friendly neo-brutalist visual design system applied across the app shell (navbar, footer), landing page hero and 3-step strip, login and register pages, and status/404 pages. Created the original inline SVG mascot "Pulse" with four distinct mood states (`happy`, `thinking`, `sad`, `surprised`). Created the design documentation guide in `docs/DESIGN.md`.
+- **Why**: Deliver a distinct, handcrafted, fun visual identity with high contrast and tactile physical affordances while preserving "The One Rule: Playful shell, calm data" — keeping all data tables, numbers, forms, and analytics calm, legible, un-tilted, with no row shadows and with status never communicated by color alone.
+- **How**: Centralized tokens in `src/app/globals.css` using `--color-ink` (`#1F1F2E`), `--color-paper` (`#FFFDF6`), `--color-blue` (`#1AA7EC`), `--color-yellow` (`#FFE68A`), `--color-coral` (`#F77B6B`), and `--color-green` (`#86D9A4`); configured self-hosted Google fonts (`Lilita_One`, `Nunito`, `JetBrains_Mono`) via `next/font/google` in `layout.tsx`; built responsive navbar with mobile collapse ($\le 768\text{px}$) and $44\text{px}$ touch targets; added accessible password visibility toggles on auth forms; eliminated all marketing hype ("production-grade", tech stack lists); verified with `npx tsc --noEmit` (0 errors) and Next.js production build (28 routes).
+- **Requirement**: UI round 1 for LinkPulse: a new playful visual design system, applied to the app shell, the landing page and the login and register pages. Work only on the current git branch (ui-polish). Do not commit or push. This is a presentation-only task: do not change any business logic, API route, service, schema, data flow or test. Do not run tests, prisma commands or anything that touches a database. You may run npm run build and npx tsc --noEmit.
+- **Next**: Review visual layout across 360px, 768px, and desktop widths.
+
 ### 2026-10-17 — Milestone 5: Production Readiness & Security Hardening
 - **What**: Completed end-to-end security hardening, input validation auditing, and resilience enhancements across authentication, API payloads, redirect flows, CSV processing, and QR endpoints.
 - **Why**: Protect production infrastructure from brute-force authentication attacks, user enumeration timing side-channels, header injection / HTTP response splitting, CSV formula injection, SVG XSS execution, route collisions, and unhandled JSON parse exceptions.
