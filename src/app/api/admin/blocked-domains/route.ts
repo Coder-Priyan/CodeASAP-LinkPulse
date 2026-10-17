@@ -6,7 +6,7 @@ import {
   BlockedDomainError,
 } from "@/lib/services/blocked-domain.service";
 
-export async function GET() {
+export async function GET(_request: NextRequest) {
   try {
     await requireAdmin();
     const domains = await listBlockedDomains();
@@ -23,8 +23,13 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireAdmin();
-    const body = await request.json();
-    const { domain, reason } = body;
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+    }
+    const { domain, reason } = body || {};
 
     if (!domain || typeof domain !== "string") {
       return NextResponse.json({ error: "Domain is required." }, { status: 400 });

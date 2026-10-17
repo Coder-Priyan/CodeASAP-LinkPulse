@@ -13,7 +13,12 @@ export async function PATCH(
   try {
     const user = await requireAuth();
     const { id } = await context.params;
-    const body = await request.json();
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+    }
 
     const updated = await updateLinkRules(id, user.userId, user.role, {
       destinationUrl: body.destinationUrl,

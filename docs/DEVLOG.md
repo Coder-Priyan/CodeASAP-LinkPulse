@@ -1,5 +1,23 @@
 # LinkPulse Devlog
 
+### 2026-10-17 — Milestone 5: Production Readiness & Security Hardening
+- **What**: Completed end-to-end security hardening, input validation auditing, and resilience enhancements across authentication, API payloads, redirect flows, CSV processing, and QR endpoints.
+- **Why**: Protect production infrastructure from brute-force authentication attacks, user enumeration timing side-channels, header injection / HTTP response splitting, CSV formula injection, SVG XSS execution, route collisions, and unhandled JSON parse exceptions.
+- **How**:
+  - Guarded production session signing: `getJwtSecret()` refuses default dev secrets in production.
+  - Implemented IP-based login rate limiting (10 attempts/min) with standard `429 Too Many Requests` responses.
+  - Mitigated authentication timing attacks via constant-time dummy 12-round bcrypt comparisons for non-existent users.
+  - Enforced a 128-character maximum length on user registration passwords to prevent CPU exhaustion DoS.
+  - Added HTTP security headers (`nosniff`, `DENY` frame options, XSS protection, referrer policy, permissions policy) in `next.config.ts`.
+  - Added strict `Content-Security-Policy: default-src 'none'` and `nosniff` headers to inline SVG QR code responses.
+  - Sanitized destination URLs by rejecting CRLF (`\r`, `\n`) and illegal control characters (`\x00-\x1F`) to eliminate HTTP response splitting.
+  - Strengthened CSV formula injection neutralization to handle tabs (`\t`), pipes (`|`), percent (`%`), and newlines in untrimmed cells per OWASP.
+  - Protected API routes against malformed JSON bodies, returning `400 Bad Request` instead of `500 Internal Server Error`.
+  - Added `"import"` to `RESERVED_SLUGS` to prevent short URL collisions with `/import`.
+  - Added 6 new regression tests and fixed test suite typing; verified 100% test pass rate across 14 suites (72/72 tests) and clean production build (28 routes).
+- **Requirement**: Milestone 5: Production Readiness & Security Hardening.
+- **Next**: Review findings and approve GitHub commit.
+
 ### 2026-10-17 — Milestone 4: QR Codes, Bulk Import & Domain Safety Blocklist
 - **What**: Built server-side QR code generation (PNG and SVG) with encoded `?src=qr` scan tracking; a CSV bulk import page (`/import`) with downloadable template, RFC-4180 parsing, formula injection neutralization, and 2-step preview/execute workflow; and an admin domain blocklist model and management UI with automatic subdomain matching and immediate redirect cutoff.
 - **Why**: Give users offline-to-online engagement measurement via QR codes while recording source markers in a strict allowlist; provide high-volume link onboarding without triggering the single-link creation rate limiter or exposing spreadsheets to formula execution attacks; protect platform reputation by intercepting malicious or phishing destinations before consuming click limits, time expiry checks, or password prompts.

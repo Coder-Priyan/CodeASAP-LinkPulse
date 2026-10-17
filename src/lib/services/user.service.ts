@@ -32,6 +32,10 @@ export async function registerUser(input: RegisterInput): Promise<SessionPayload
     throw new UserValidationError("Password must be at least 8 characters long.");
   }
 
+  if (password.length > 128) {
+    throw new UserValidationError("Password cannot exceed 128 characters.");
+  }
+
   const existing = await db.user.findUnique({
     where: { email },
     select: { id: true },
@@ -66,6 +70,9 @@ export async function registerUser(input: RegisterInput): Promise<SessionPayload
   };
 }
 
+// Constant-time dummy hash to protect against user enumeration via timing attack
+const TIMING_SAFE_DUMMY_HASH = "$2b$12$djWSYoheBpnBOCmBqanhIONijSBtrganiU.UEFfGjGgH2jiv6Drh.";
+
 /**
  * Authenticate user with email and password
  */
@@ -77,6 +84,8 @@ export async function authenticateUser(emailInput: string, passwordInput: string
   });
 
   if (!user) {
+    // Execute dummy bcrypt check to prevent timing side-channel differences between existing/non-existing users
+    await verifyPassword(passwordInput, TIMING_SAFE_DUMMY_HASH).catch(() => false);
     throw new UserValidationError("Invalid email or password.");
   }
 

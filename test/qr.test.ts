@@ -129,6 +129,8 @@ describe("Milestone 4: QR Codes with Scan Tracking", () => {
     const adminRes = await getQrHandler(adminReq, { params: Promise.resolve({ id: link.id }) });
     expect(adminRes.status).toBe(200);
     expect(adminRes.headers.get("content-type")).toBe("image/svg+xml");
+    expect(adminRes.headers.get("content-security-policy")).toBe("default-src 'none'");
+    expect(adminRes.headers.get("x-content-type-options")).toBe("nosniff");
 
     // 3. Other user requests QR -> 403 Forbidden
     mockUser = { userId: otherUser.id, email: otherUser.email, role: Role.USER };

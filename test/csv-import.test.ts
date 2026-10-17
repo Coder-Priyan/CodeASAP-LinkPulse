@@ -78,16 +78,25 @@ describe("Milestone 4: CSV Bulk Import", () => {
     }
   });
 
-  it("neutralizes CSV formula injection starting with =, +, -, @", () => {
+  it("neutralizes CSV formula injection starting with =, +, -, @, tab, pipe, percent", () => {
     // Formula payloads targeting Excel/Sheets
     expect(neutralizeCsvFormula("=cmd|'/C calc'!A0")).toBe("'=cmd|'/C calc'!A0");
     expect(neutralizeCsvFormula("+1+2")).toBe("'+1+2");
     expect(neutralizeCsvFormula("-5+10")).toBe("'-5+10");
     expect(neutralizeCsvFormula("@SUM(A1:A10)")).toBe("'@SUM(A1:A10)");
+    expect(neutralizeCsvFormula("\tcalc")).toBe("'\tcalc");
+    expect(neutralizeCsvFormula("\r\ncalc")).toBe("'\r\ncalc");
+    expect(neutralizeCsvFormula("|cmd")).toBe("'|cmd");
+    expect(neutralizeCsvFormula("%1")).toBe("'%1");
+    expect(neutralizeCsvFormula("  =cmd|'/C calc'!A0")).toBe("'=cmd|'/C calc'!A0");
 
-    // Safe regular values should not be altered
+    // Safe regular values should not be altered or corrupted
     expect(neutralizeCsvFormula("LinkPulse Product Launch")).toBe("LinkPulse Product Launch");
-    expect(neutralizeCsvFormula("https://example.com")).toBe("https://example.com");
+    expect(neutralizeCsvFormula("Product - Launch")).toBe("Product - Launch");
+    expect(neutralizeCsvFormula("user@example.com")).toBe("user@example.com");
+    expect(neutralizeCsvFormula("50% off summer sale")).toBe("50% off summer sale");
+    expect(neutralizeCsvFormula("https://example.com?a=1&b=2")).toBe("https://example.com?a=1&b=2");
+    expect(neutralizeCsvFormula("")).toBe("");
   });
 
   it("parses CSV with UTF-8 BOM, CRLF, quoted commas, and escaped quotes", () => {

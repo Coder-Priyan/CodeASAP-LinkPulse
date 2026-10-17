@@ -45,13 +45,16 @@ export interface CsvImportSummary {
 
 /**
  * Neutralizes CSV formula injection.
- * Any text field beginning with =, +, -, or @ is prefixed with an apostrophe (')
+ * Any text field beginning with =, +, -, @, \t, \r, |, or % is prefixed with an apostrophe (')
  * so that spreadsheet engines treat the cell as plain text rather than executing code.
  */
 export function neutralizeCsvFormula(value: string): string {
   if (!value) return value;
+  if (/^[\t\r\n]/.test(value)) {
+    return `'${value}`;
+  }
   const trimmed = value.trim();
-  if (/^[=+\-@]/.test(trimmed)) {
+  if (/^[=+\-@|%]/.test(trimmed)) {
     return `'${trimmed}`;
   }
   return trimmed;

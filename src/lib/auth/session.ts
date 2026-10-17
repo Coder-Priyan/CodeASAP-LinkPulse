@@ -5,9 +5,19 @@ import { Role } from "@prisma/client";
 
 const COOKIE_NAME = "linkpulse_session";
 const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "linkpulse-fallback-dev-secret-minimum-32-chars-key"
-);
+
+export function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (
+    process.env.NODE_ENV === "production" &&
+    (!secret || secret === "linkpulse-fallback-dev-secret-minimum-32-chars-key")
+  ) {
+    throw new Error(
+      "CRITICAL SECURITY CONFIGURATION ERROR: JWT_SECRET environment variable must be set in production."
+    );
+  }
+  return new TextEncoder().encode(secret || "linkpulse-fallback-dev-secret-minimum-32-chars-key");
+}
 
 export interface SessionPayload {
   userId: string;
@@ -38,7 +48,7 @@ export async function signSession(payload: SessionPayload): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 /**
@@ -46,7 +56,7 @@ export async function signSession(payload: SessionPayload): Promise<string> {
  */
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return {
       userId: payload.userId as string,
       email: payload.email as string,

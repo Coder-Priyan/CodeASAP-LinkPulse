@@ -41,6 +41,8 @@ export async function GET(
       const headers = new Headers({
         "Content-Type": "image/svg+xml",
         "Cache-Control": "private, max-age=3600",
+        "Content-Security-Policy": "default-src 'none'",
+        "X-Content-Type-Options": "nosniff",
       });
       if (isDownload) {
         headers.set("Content-Disposition", `attachment; filename="${link.code}-qr.svg"`);

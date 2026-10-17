@@ -31,8 +31,7 @@ describe("Short URL Helper", () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
     // Mock window
     const originalWindow = global.window;
-    // @ts-expect-error test mock
-    global.window = {
+    (global as any).window = {
       location: {
         origin: "http://localhost:3000/",
       },
@@ -49,8 +48,7 @@ describe("Short URL Helper", () => {
   it("returns root relative path when neither env var nor window is available", () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
     const originalWindow = global.window;
-    // @ts-expect-error test mock
-    delete global.window;
+    delete (global as any).window;
 
     try {
       expect(getShortUrlBase()).toBe("");

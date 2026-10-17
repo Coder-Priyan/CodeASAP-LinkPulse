@@ -64,7 +64,10 @@ export async function GET(
   // 3. Extract visitor headers & check for automated crawlers/bots
   const userAgent = request.headers.get("user-agent") || "";
   const referrer = request.headers.get("referer") || null;
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+  const ip =
+    request.headers.get("x-real-ip") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    null;
   const isBotVisitor = isBot(userAgent);
 
   // 4. Human visits: increment atomic click counter & record click event

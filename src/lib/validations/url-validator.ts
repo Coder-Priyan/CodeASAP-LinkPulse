@@ -15,6 +15,11 @@ export function validateUrl(rawUrl: string): UrlValidationResult {
     return { isValid: false, error: "Destination URL is required." };
   }
 
+  // Reject CRLF and control characters to guard against header injection & HTTP response splitting
+  if (/[\r\n\x00-\x1F]/.test(rawUrl)) {
+    return { isValid: false, error: "URL cannot contain newline or control characters." };
+  }
+
   const trimmed = rawUrl.trim();
 
   if (trimmed.length > 2048) {

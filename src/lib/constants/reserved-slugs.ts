@@ -12,6 +12,7 @@ export const RESERVED_SLUGS = new Set([
   "register",
   "settings",
   "analytics",
+  "import",
   "link",
   "links",
   "link-status",

@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateUser, UserValidationError } from "@/lib/services/user.service";
 import { setSessionCookie } from "@/lib/auth/session";
+import { checkLoginRateLimit, RateLimitError } from "@/lib/services/rate-limiter";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password } = body;
+    const ip =
+      request.headers.get("x-real-ip") ||
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "127.0.0.1";
+    await checkLoginRateLimit(ip);
+
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+    }
+
+    const { email, password } = body || {};
 
     if (!email || !password) {
       return NextResponse.json(
@@ -19,6 +32,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, user: sessionPayload });
   } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        {
+          status: 429,
+          headers: { "Retry-After": String(error.retryAfterSeconds) },
+        }
+      );
+    }
     if (error instanceof UserValidationError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }

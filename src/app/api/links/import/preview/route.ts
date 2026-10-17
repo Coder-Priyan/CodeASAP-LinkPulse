@@ -20,8 +20,13 @@ export async function POST(request: NextRequest) {
       }
       csvContent = await (file as Blob).text();
     } else {
-      const body = await request.json();
-      csvContent = body.csvContent;
+      let body: any;
+      try {
+        body = await request.json();
+      } catch {
+        return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+      }
+      csvContent = body?.csvContent;
     }
 
     if (!csvContent || typeof csvContent !== "string") {

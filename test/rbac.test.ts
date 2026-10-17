@@ -197,4 +197,34 @@ describe("6. Role-Based Access Control (RBAC) & Multi-Tenant Isolation", () => {
       await db.user.delete({ where: { id: createdUser.id } });
     }
   });
+
+  it("rejects registration with password exceeding 128 characters", async () => {
+    const longPassword = "A".repeat(129);
+    const req = new NextRequest("http://localhost:3000/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: `toolong-${Date.now()}@linkpulse.test`,
+        password: longPassword,
+      }),
+    });
+
+    const res = await registerHandler(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("cannot exceed 128 characters");
+  });
+
+  it("returns 400 Bad Request when registration payload is invalid JSON", async () => {
+    const req = new NextRequest("http://localhost:3000/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{ broken json",
+    });
+
+    const res = await registerHandler(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("Invalid JSON");
+  });
 });

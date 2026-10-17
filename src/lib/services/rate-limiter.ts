@@ -78,3 +78,38 @@ export function resetBulkImportRateLimitForTesting(userId?: string): void {
   }
 }
 
+// Login rate limiting: 10 attempts per minute per IP/identifier to protect against credential brute-forcing
+const MAX_LOGIN_ATTEMPTS_PER_WINDOW = 10;
+const LOGIN_WINDOW_MS = 60 * 1000;
+
+const loginTimestamps = new Map<string, number[]>();
+
+export async function checkLoginRateLimit(identifier: string): Promise<void> {
+  const now = Date.now();
+  const windowStart = now - LOGIN_WINDOW_MS;
+
+  const timestamps = (loginTimestamps.get(identifier) || []).filter(
+    (t) => t > windowStart
+  );
+
+  if (timestamps.length >= MAX_LOGIN_ATTEMPTS_PER_WINDOW) {
+    const oldest = timestamps[0];
+    const retryAfter = Math.ceil((oldest + LOGIN_WINDOW_MS - now) / 1000);
+    throw new RateLimitError(
+      `Too many login attempts. Please wait ${retryAfter > 0 ? retryAfter : 60} seconds before trying again.`,
+      retryAfter > 0 ? retryAfter : 60
+    );
+  }
+
+  timestamps.push(now);
+  loginTimestamps.set(identifier, timestamps);
+}
+
+export function resetLoginRateLimitForTesting(identifier?: string): void {
+  if (identifier) {
+    loginTimestamps.delete(identifier);
+  } else {
+    loginTimestamps.clear();
+  }
+}
+

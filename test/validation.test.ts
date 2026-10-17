@@ -43,6 +43,12 @@ describe("4. URL and Alias Validation", () => {
       expect(validateUrl("http://").isValid).toBe(false);
     });
 
+    it("rejects URLs containing CRLF or illegal control characters", () => {
+      expect(validateUrl("https://example.com\r\nSet-Cookie: evil=1").isValid).toBe(false);
+      expect(validateUrl("https://example.com\nLocation: https://evil.com").isValid).toBe(false);
+      expect(validateUrl("https://example.com\0").isValid).toBe(false);
+    });
+
     it("prevents self-referencing redirect loops", () => {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       expect(validateUrl(`${appUrl}/loop-code`).isValid).toBe(false);
@@ -76,7 +82,7 @@ describe("4. URL and Alias Validation", () => {
     });
 
     it("rejects reserved system keywords and routes", () => {
-      const reserved = ["api", "admin", "dashboard", "login", "register", "link-status", "favicon.ico"];
+      const reserved = ["api", "admin", "dashboard", "login", "register", "import", "link-status", "favicon.ico"];
       for (const slug of reserved) {
         const res = validateCustomAlias(slug);
         expect(res.isValid).toBe(false);

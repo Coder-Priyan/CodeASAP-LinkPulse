@@ -23,8 +23,13 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
-    const body = await request.json();
-    const { name, description } = body;
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+    }
+    const { name, description } = body || {};
 
     const campaign = await createCampaign(user.userId, {
       name,

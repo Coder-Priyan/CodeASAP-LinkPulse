@@ -4,8 +4,14 @@ import { setSessionCookie } from "@/lib/auth/session";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password, name } = body;
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+    }
+
+    const { email, password, name } = body || {};
 
     const sessionPayload = await registerUser({
       email,

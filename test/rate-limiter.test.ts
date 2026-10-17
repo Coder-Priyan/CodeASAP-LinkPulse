@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { db } from "@/lib/db";
-import { checkLinkCreationRateLimit, RateLimitError } from "@/lib/services/rate-limiter";
+import {
+  checkLinkCreationRateLimit,
+  checkLoginRateLimit,
+  resetLoginRateLimitForTesting,
+  RateLimitError,
+} from "@/lib/services/rate-limiter";
 import {
   checkPasswordRateLimit,
   recordPasswordAttempt,
@@ -31,6 +36,7 @@ vi.mock("@/lib/auth/guard", () => {
 });
 
 import { POST as createLinkHandler } from "@/app/api/links/route";
+import { POST as loginHandler } from "@/app/api/auth/login/route";
 
 describe("7. Rate Limiting", () => {
   let testUserId: string;
@@ -158,6 +164,86 @@ describe("7. Rate Limiting", () => {
       // 6. When correct passcode is entered, prior failures are cleared
       await recordPasswordAttempt(testLinkId, testIp, true);
       await expect(checkPasswordRateLimit(testLinkId, testIp)).resolves.not.toThrow();
+    });
+  });
+
+  describe("Login Rate Limiting (10 attempts / 1 minute)", () => {
+    it("allows up to 10 login attempts per minute and blocks the 11th", async () => {
+      const clientIp = "198.51.100.1";
+      resetLoginRateLimitForTesting(clientIp);
+
+      // 10 attempts allowed
+      for (let i = 0; i < 10; i++) {
+        await expect(checkLoginRateLimit(clientIp)).resolves.not.toThrow();
+      }
+
+      // 11th attempt must be rejected with 429 RateLimitError
+      await expect(checkLoginRateLimit(clientIp)).rejects.toThrowError(RateLimitError);
+
+      try {
+        await checkLoginRateLimit(clientIp);
+      } catch (err: any) {
+        expect(err.name).toBe("RateLimitError");
+        expect(err.retryAfterSeconds).toBeGreaterThan(0);
+        expect(err.message).toContain("Too many login attempts");
+      }
+
+      // Cleanup
+      resetLoginRateLimitForTesting(clientIp);
+    });
+
+    it("returns HTTP 429 Too Many Requests when POST /api/auth/login exceeds threshold", async () => {
+      const clientIp = "198.51.100.99";
+      resetLoginRateLimitForTesting(clientIp);
+
+      for (let i = 0; i < 10; i++) {
+        await checkLoginRateLimit(clientIp);
+      }
+
+      const req = new NextRequest("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": clientIp,
+        },
+        body: JSON.stringify({ email: "victim@example.com", password: "wrongpassword" }),
+      });
+
+      const res = await loginHandler(req);
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBeDefined();
+      const body = await res.json();
+      expect(body.error).toContain("Too many login attempts");
+
+      resetLoginRateLimitForTesting(clientIp);
+    });
+
+    it("prioritizes trusted x-real-ip header over client-supplied x-forwarded-for to prevent spoofing", async () => {
+      const realIp = "203.0.113.100";
+      const spoofedForwarded = "1.2.3.4, 5.6.7.8";
+      resetLoginRateLimitForTesting(realIp);
+      resetLoginRateLimitForTesting("1.2.3.4");
+
+      // Exhaust limit on realIp
+      for (let i = 0; i < 10; i++) {
+        await checkLoginRateLimit(realIp);
+      }
+
+      // Request with realIp and spoofed x-forwarded-for should be blocked because realIp is exhausted
+      const req = new NextRequest("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-real-ip": realIp,
+          "x-forwarded-for": spoofedForwarded,
+        },
+        body: JSON.stringify({ email: "victim@example.com", password: "wrongpassword" }),
+      });
+
+      const res = await loginHandler(req);
+      expect(res.status).toBe(429);
+
+      resetLoginRateLimitForTesting(realIp);
     });
   });
 });

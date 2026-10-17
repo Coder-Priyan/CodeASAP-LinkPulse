@@ -15,15 +15,24 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { code, password, src } = body;
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+    }
+
+    const { code, password, src } = body || {};
     const source = src === "qr" ? "qr" : "direct";
 
     if (!code || typeof code !== "string") {
       return NextResponse.json({ error: "Short code is required." }, { status: 400 });
     }
 
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+    const ip =
+      request.headers.get("x-real-ip") ||
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "127.0.0.1";
     const userAgent = request.headers.get("user-agent") || "";
     const referrer = request.headers.get("referer") || null;
 
