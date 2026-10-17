@@ -32,13 +32,21 @@ export async function GET(
     return NextResponse.redirect(notFoundUrl.toString(), { status: 307 });
   }
 
-  // 2. Evaluate rules in deliberate order: disabled -> expired -> click limit -> password
+  const searchParams = request.nextUrl.searchParams;
+  const rawSource = searchParams.get("src");
+  const source = rawSource === "qr" ? "qr" : "direct";
+
+  // 2. Evaluate rules in deliberate order: disabled -> blocked domain -> expired -> click limit -> password
   const evaluation = await evaluateLinkRules(link);
 
   if (evaluation.status !== "ACTIVE") {
-    // If password is required, route to dedicated password prompt
+    // If password is required, route to dedicated password prompt, preserving QR source marker
     if (evaluation.status === "PASSWORD_REQUIRED") {
-      return NextResponse.redirect(new URL(`/p/${encodeURIComponent(code)}`, appUrl), {
+      const pwdUrl = new URL(`/p/${encodeURIComponent(code)}`, appUrl);
+      if (source === "qr") {
+        pwdUrl.searchParams.set("src", "qr");
+      }
+      return NextResponse.redirect(pwdUrl.toString(), {
         status: 307,
       });
     }
@@ -79,10 +87,10 @@ export async function GET(
     try {
       if (typeof after === "function") {
         after(async () => {
-          await recordClick(link.id, { userAgent, referrer, ip });
+          await recordClick(link.id, { userAgent, referrer, ip, source });
         });
       } else {
-        void recordClick(link.id, { userAgent, referrer, ip });
+        void recordClick(link.id, { userAgent, referrer, ip, source });
       }
     } catch (err) {
       console.error("[RedirectRoute] Logging dispatch error:", err);

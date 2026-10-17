@@ -13,17 +13,16 @@ export interface RegisterInput {
   email: string;
   password: string;
   name?: string;
-  role?: Role;
 }
 
 /**
- * Register a new user with email and hashed password
+ * Register a new user with email and hashed password (always Role.USER)
  */
 export async function registerUser(input: RegisterInput): Promise<SessionPayload> {
   const email = input.email.trim().toLowerCase();
   const password = input.password;
   const name = input.name?.trim() || null;
-  const role = input.role || Role.USER;
+  const role = Role.USER;
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new UserValidationError("Please provide a valid email address.");

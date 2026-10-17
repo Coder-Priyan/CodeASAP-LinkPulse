@@ -143,4 +143,64 @@ describe("1. Rule Evaluation Order", () => {
     const state = computeLinkState(link);
     expect(state).toBe("active");
   });
+
+  it("prioritizes DISABLED over BLOCKED when link is deactivated and targets a blocked domain", async () => {
+    const blocked = await db.blockedDomain.create({
+      data: {
+        domain: `blocked-eval-${Date.now()}.com`,
+        createdById: testUserId,
+      },
+    });
+
+    const link = await db.link.create({
+      data: {
+        code: `test-rule-dis-blk-${Date.now()}`,
+        destinationUrl: `https://${blocked.domain}/path`,
+        userId: testUserId,
+        isActive: false,
+        disabledReason: "Admin deactivated",
+      },
+    });
+    createdLinkIds.push(link.id);
+
+    try {
+      const result = await evaluateLinkRules(link);
+      expect(result.status).toBe("DISABLED");
+    } finally {
+      await db.blockedDomain.delete({ where: { id: blocked.id } });
+    }
+  });
+
+  it("prioritizes BLOCKED over EXPIRED, LIMIT, and PASSWORD when domain is blocked", async () => {
+    const blocked = await db.blockedDomain.create({
+      data: {
+        domain: `malicious-eval-${Date.now()}.com`,
+        reason: "Security risk",
+        createdById: testUserId,
+      },
+    });
+
+    const hashed = await bcrypt.hash("Pass123!", 10);
+    const link = await db.link.create({
+      data: {
+        code: `test-rule-blk-all-${Date.now()}`,
+        destinationUrl: `https://sub.${blocked.domain}/steal`,
+        userId: testUserId,
+        isActive: true,
+        expiresAt: new Date(Date.now() - 3600000), // expired
+        clickLimit: 5,
+        clicksCount: 5, // at limit
+        passwordHash: hashed, // password protected
+      },
+    });
+    createdLinkIds.push(link.id);
+
+    try {
+      const result = await evaluateLinkRules(link, "Pass123!");
+      expect(result.status).toBe("BLOCKED");
+      expect(result.reason).toBe("Security risk");
+    } finally {
+      await db.blockedDomain.delete({ where: { id: blocked.id } });
+    }
+  });
 });

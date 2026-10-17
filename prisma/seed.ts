@@ -50,6 +50,7 @@ async function main() {
   console.log("🌱 Starting LinkPulse database seed...");
 
   // 1. Clean existing records for idempotent seed
+  await prisma.blockedDomain.deleteMany();
   await prisma.passwordAttempt.deleteMany();
   await prisma.clickEvent.deleteMany();
   await prisma.linkTag.deleteMany();
@@ -94,6 +95,15 @@ async function main() {
   });
 
   console.log("👤 Created 3 users: 1 ADMIN, 2 regular USERS.");
+
+  // 3b. Create sample blocked domain (Admin Governance)
+  await prisma.blockedDomain.create({
+    data: {
+      domain: "malicious-phishing.test",
+      reason: "Known credential harvesting phishing domain",
+      createdById: adminUser.id,
+    },
+  });
 
   // 4. Create Campaigns
   const campSpringLaunch = await prisma.campaign.create({
@@ -307,6 +317,7 @@ async function main() {
         os: osList[i % osList.length],
         userAgent: `Mozilla/5.0 (${osList[i % osList.length]}) AppleWebKit/537.36 Chrome/122.0.0.0`,
         visitorHash: generateFakeVisitorHash(visitorKey),
+        source: i % 4 === 0 ? "qr" : "direct",
       });
     }
   };

@@ -1,5 +1,12 @@
 # LinkPulse Devlog
 
+### 2026-10-17 — Milestone 4: QR Codes, Bulk Import & Domain Safety Blocklist
+- **What**: Built server-side QR code generation (PNG and SVG) with encoded `?src=qr` scan tracking; a CSV bulk import page (`/import`) with downloadable template, RFC-4180 parsing, formula injection neutralization, and 2-step preview/execute workflow; and an admin domain blocklist model and management UI with automatic subdomain matching and immediate redirect cutoff.
+- **Why**: Give users offline-to-online engagement measurement via QR codes while recording source markers in a strict allowlist; provide high-volume link onboarding without triggering the single-link creation rate limiter or exposing spreadsheets to formula execution attacks; protect platform reputation by intercepting malicious or phishing destinations before consuming click limits, time expiry checks, or password prompts.
+- **How**: Created `src/lib/services/qr.service.ts` using `qrcode` and added an RBAC-guarded download endpoint (`/api/links/[id]/qr`); updated `click.service.ts` to allowlist `"qr"` and `"direct"`; built `csv-import.service.ts` with formula neutralizer (prefixing `=+-@` with `'`), RFC-4180 tokenizer, and hourly bulk rate limiter; added `BlockedDomain` schema model and `blocked-domain.service.ts` with fast hierarchical candidate domain lookups; placed domain block validation immediately after disabled checks in `evaluateLinkRules`; built `QrModal`, bulk import page, and admin blocklist interface; added unit tests across 3 new test files bringing the automated suite to 14 test files and 66 passing tests.
+- **Requirement**: QR Codes, Bulk Import, Safety Checks.
+- **Next**: Custom branding and custom domains, webhook alerts for threshold breaches, device-based routing.
+
 ### 2026-10-17 — Production Hardening & Demo Data Preparation
 - **What**: Added a strict confirmation guard (`SEED_CONFIRM="yes"`) and environment-driven passwords to the seed script; restricted one-click login demo credentials to non-production builds with complete dead-code elimination in production bundles; unified short URL construction across components into a centralized helper; differentiated expired link alerts as `EXPIRED` ("Expired" in UI); verified production session cookie security attributes.
 - **Why**: Prevent accidental destructive database wipes on shared/live databases, ensure zero default credentials leak into production client assets, eliminate discrepancies in client-side short URL generation, and provide precise operational alert semantics for expired links.

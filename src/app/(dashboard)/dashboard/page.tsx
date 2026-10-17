@@ -16,6 +16,7 @@ import {
   Tag as TagIcon,
   X,
   BarChart3,
+  Upload,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -132,6 +133,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link href="/import" className="btn btn-secondary btn-sm flex items-center gap-2">
+            <Upload size={15} color="var(--accent-primary)" />
+            <span>Bulk Import (CSV)</span>
+          </Link>
+
           <Link href="/analytics" className="btn btn-secondary btn-sm flex items-center gap-2">
             <BarChart3 size={15} color="var(--accent-secondary)" />
             <span>Open Analytics Dashboard</span>

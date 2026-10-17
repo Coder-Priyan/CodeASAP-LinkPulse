@@ -47,8 +47,11 @@ export interface AnalyticsReport {
     uniqueVisitors: number;
     activeLinks: number;
     totalLinks: number;
+    qrScans: number;
+    directClicks: number;
   };
   clicksOverTime: DayClickStat[];
+  sourceBreakdown: BreakdownStat[];
   deviceBreakdown: BreakdownStat[];
   browserBreakdown: BreakdownStat[];
   referrerBreakdown: BreakdownStat[];
@@ -163,8 +166,13 @@ export async function getAnalyticsReport(
     ([date, clicks]) => ({ date, clicks })
   );
 
-  // 5. Categorical Breakdowns (Device, Browser, Referrer)
-  const [deviceRows, browserRows, referrerRows] = await Promise.all([
+  // 5. Categorical Breakdowns (Source, Device, Browser, Referrer)
+  const [sourceRows, deviceRows, browserRows, referrerRows] = await Promise.all([
+    db.clickEvent.groupBy({
+      by: ["source"],
+      where: clickWhere,
+      _count: { id: true },
+    }),
     db.clickEvent.groupBy({
       by: ["device"],
       where: clickWhere,
@@ -187,6 +195,25 @@ export async function getAnalyticsReport(
       take: 8,
     }),
   ]);
+
+  let qrScans = 0;
+  for (const s of sourceRows) {
+    if (s.source === "qr") qrScans += s._count.id;
+  }
+  const directClicks = Math.max(0, totalClicks - qrScans);
+
+  const sourceBreakdown: BreakdownStat[] = [
+    {
+      name: "Direct / Web",
+      count: directClicks,
+      percentage: totalClicks > 0 ? Math.round((directClicks / totalClicks) * 100) : 0,
+    },
+    {
+      name: "QR Code Scan",
+      count: qrScans,
+      percentage: totalClicks > 0 ? Math.round((qrScans / totalClicks) * 100) : 0,
+    },
+  ];
 
   const deviceBreakdown: BreakdownStat[] = deviceRows.map((r) => ({
     name: r.device || "Unknown",
@@ -342,8 +369,11 @@ export async function getAnalyticsReport(
       uniqueVisitors,
       activeLinks: activeLinksCount,
       totalLinks,
+      qrScans,
+      directClicks,
     },
     clicksOverTime,
+    sourceBreakdown,
     deviceBreakdown,
     browserBreakdown,
     referrerBreakdown,

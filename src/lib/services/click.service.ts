@@ -6,6 +6,7 @@ export interface ClickContext {
   userAgent?: string | null;
   referrer?: string | null;
   ip?: string | null;
+  source?: string | null;
 }
 
 /**
@@ -28,6 +29,9 @@ export async function recordClick(linkId: string, context: ClickContext): Promis
     const os = detectOS(rawUa);
     const visitorHash = generateVisitorHash(context.ip, rawUa);
 
+    // Source normalization (strict allowlist: "qr" or "direct" only)
+    const normalizedSource = context.source === "qr" ? "qr" : "direct";
+
     // Sanitize referrer
     let cleanReferrer: string | null = null;
     if (context.referrer && context.referrer.trim().length > 0) {
@@ -42,7 +46,7 @@ export async function recordClick(linkId: string, context: ClickContext): Promis
       }
     }
 
-    // 3. Persist ClickEvent with privacy-safe visitor identifier
+    // 3. Persist ClickEvent with privacy-safe visitor identifier and source marker
     await db.clickEvent.create({
       data: {
         linkId,
@@ -52,6 +56,7 @@ export async function recordClick(linkId: string, context: ClickContext): Promis
         os,
         userAgent: rawUa.length > 500 ? rawUa.substring(0, 500) : rawUa,
         visitorHash,
+        source: normalizedSource,
       },
     });
 

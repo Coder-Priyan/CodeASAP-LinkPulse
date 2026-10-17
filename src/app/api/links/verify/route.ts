@@ -16,7 +16,8 @@ import {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { code, password } = body;
+    const { code, password, src } = body;
+    const source = src === "qr" ? "qr" : "direct";
 
     if (!code || typeof code !== "string") {
       return NextResponse.json({ error: "Short code is required." }, { status: 400 });
@@ -48,7 +49,10 @@ export async function POST(request: NextRequest) {
 
     if (evaluation.status !== "ACTIVE") {
       return NextResponse.json(
-        { error: evaluation.reason || "This link is unavailable." },
+        {
+          error: evaluation.reason || "This link is unavailable.",
+          status: evaluation.status,
+        },
         { status: 403 }
       );
     }
@@ -72,14 +76,14 @@ export async function POST(request: NextRequest) {
       try {
         if (typeof after === "function") {
           after(async () => {
-            await recordClick(link.id, { userAgent, referrer, ip });
+            await recordClick(link.id, { userAgent, referrer, ip, source });
           });
         } else {
-          void recordClick(link.id, { userAgent, referrer, ip });
+          void recordClick(link.id, { userAgent, referrer, ip, source });
         }
       } catch (err) {
         // Fallback if after() is invoked outside request scope
-        void recordClick(link.id, { userAgent, referrer, ip });
+        void recordClick(link.id, { userAgent, referrer, ip, source });
       }
     }
 

@@ -1,6 +1,17 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { db } from "@/lib/db";
 import { Role } from "@prisma/client";
+import { NextRequest } from "next/server";
+
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({
+    set: vi.fn(),
+    get: vi.fn(),
+    delete: vi.fn(),
+  })),
+}));
+
+import { POST as registerHandler } from "@/app/api/auth/register/route";
 import {
   createLink,
   getUserLinks,
@@ -156,5 +167,34 @@ describe("6. Role-Based Access Control (RBAC) & Multi-Tenant Isolation", () => {
     // Click history must remain completely intact
     const afterClicks = await db.clickEvent.count({ where: { linkId: link.id } });
     expect(afterClicks).toBe(2);
+  });
+
+  it("enforces role USER on registration: POST /api/auth/register with {'role':'ADMIN'} creates a user with role USER in the DB", async () => {
+    const testRegEmail = `test-reg-role-${Date.now()}@linkpulse.test`;
+    const req = new NextRequest("http://localhost:3000/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: testRegEmail,
+        password: "ValidPassword123!",
+        name: "Test Attacker",
+        role: "ADMIN",
+      }),
+    });
+
+    const res = await registerHandler(req);
+    expect(res.status).toBe(201);
+
+    const createdUser = await db.user.findUnique({
+      where: { email: testRegEmail },
+    });
+
+    expect(createdUser).not.toBeNull();
+    expect(createdUser?.role).toBe(Role.USER);
+
+    // Clean up test user
+    if (createdUser) {
+      await db.user.delete({ where: { id: createdUser.id } });
+    }
   });
 });

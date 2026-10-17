@@ -42,9 +42,10 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
     const body = await request.json();
-    const { destinationUrl, customAlias, expiresAt, clickLimit, password, campaignId, tagIds } = body;
+    const { title, destinationUrl, customAlias, expiresAt, clickLimit, password, campaignId, tagIds } = body;
 
     const link = await createLink({
+      title: title ? String(title) : undefined,
       destinationUrl,
       customAlias: customAlias ? String(customAlias) : undefined,
       userId: user.userId,
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest) {
       password: password ? String(password) : null,
       campaignId: campaignId ? String(campaignId) : null,
       tagIds: Array.isArray(tagIds) ? tagIds : undefined,
+      // skipRateLimit is strictly omitted here to prevent client bypass
     });
 
     return NextResponse.json({ success: true, link }, { status: 201 });

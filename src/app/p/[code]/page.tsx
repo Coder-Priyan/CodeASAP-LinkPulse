@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Lock, ArrowRight, AlertCircle, Shield } from "lucide-react";
 import Link from "next/link";
 
-export default function PasswordChallengePage() {
+function PasswordChallengeContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const code = (params.code as string) || "";
+  const src = searchParams.get("src") || undefined;
 
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,12 +31,16 @@ export default function PasswordChallengePage() {
       const res = await fetch(`/api/links/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, password }),
+        body: JSON.stringify({ code, password, src }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.status === "BLOCKED" || data.status === "DISABLED" || data.status === "EXPIRED" || data.status === "LIMIT_REACHED") {
+          router.push(`/link-status?code=${encodeURIComponent(code)}&status=${data.status}&reason=${encodeURIComponent(data.error || "")}`);
+          return;
+        }
         throw new Error(data.error || "Incorrect password.");
       }
 
@@ -147,5 +153,13 @@ export default function PasswordChallengePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PasswordChallengePage() {
+  return (
+    <Suspense fallback={<div className="container" style={{ maxWidth: "480px", paddingTop: "5rem", textAlign: "center" }}>Loading...</div>}>
+      <PasswordChallengeContent />
+    </Suspense>
   );
 }

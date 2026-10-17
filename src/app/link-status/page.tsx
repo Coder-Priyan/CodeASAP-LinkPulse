@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, Clock, SearchX, ArrowLeft, Zap, Gauge } from "lucide-react";
+import { AlertCircle, Clock, SearchX, ArrowLeft, Zap, Gauge, ShieldAlert } from "lucide-react";
 
 interface PageProps {
   searchParams: Promise<{
@@ -15,6 +15,7 @@ export default async function LinkStatusPage({ searchParams }: PageProps) {
   const isExpired = status === "EXPIRED";
   const isInactive = status === "INACTIVE" || status === "DISABLED";
   const isLimitReached = status === "LIMIT_REACHED";
+  const isBlocked = status === "BLOCKED";
 
   let title = "Link Not Found";
   let description =
@@ -45,6 +46,13 @@ export default async function LinkStatusPage({ searchParams }: PageProps) {
     IconComponent = AlertCircle;
     iconColor = "var(--warning)";
     iconBg = "var(--warning-bg)";
+  } else if (isBlocked) {
+    title = "Destination Domain Blocked";
+    description =
+      reason || `The destination domain for "/${code}" has been blocked by administrators for safety or policy compliance.`;
+    IconComponent = ShieldAlert;
+    iconColor = "var(--danger)";
+    iconBg = "var(--danger-bg)";
   }
 
   return (

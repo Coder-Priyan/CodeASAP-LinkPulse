@@ -3,6 +3,7 @@ import { validateUrl } from "../validations/url-validator";
 import { validateCustomAlias } from "../validations/alias-validator";
 import { generateShortCode } from "../utils/code-generator";
 import { checkLinkCreationRateLimit } from "./rate-limiter";
+import { isDomainBlocked } from "./blocked-domain.service";
 import bcrypt from "bcryptjs";
 import { Role, Prisma } from "@prisma/client";
 
@@ -18,6 +19,7 @@ export type ComputedLinkState = "active" | "expired" | "limit_reached" | "disabl
 export type LinkEvaluationStatus =
   | "ACTIVE"
   | "DISABLED"
+  | "BLOCKED"
   | "EXPIRED"
   | "LIMIT_REACHED"
   | "PASSWORD_REQUIRED"
@@ -25,6 +27,7 @@ export type LinkEvaluationStatus =
   | "NOT_FOUND";
 
 export interface CreateLinkInput {
+  title?: string | null;
   destinationUrl: string;
   customAlias?: string;
   userId: string;
@@ -33,6 +36,7 @@ export interface CreateLinkInput {
   password?: string | null;
   campaignId?: string | null;
   tagIds?: string[];
+  skipRateLimit?: boolean;
 }
 
 export interface UpdateLinkRulesInput {
@@ -80,6 +84,7 @@ export interface LinkWithStats {
   updatedAt: Date;
   clicksCount: number;
   uniqueVisitorsCount: number;
+  qrScansCount: number;
   state: ComputedLinkState;
   user?: {
     id: string;
@@ -109,10 +114,14 @@ export function computeLinkState(link: {
 
 /**
  * Evaluates redirect rules in a deliberate, centralized order:
- * 1. Disabled (admin or owner toggle)
- * 2. Expired (time-based expiry)
- * 3. Click Limit (maximum visit threshold)
- * 4. Password Protection (hashed verification)
+ * 1. Disabled (admin or owner manual toggle)
+ * 2. Blocked Domain (platform safety check against admin domain blocklist)
+ *    Placed immediately after disabled state because malicious or policy-violating
+ *    destination domains must be intercepted before consuming click limits, time
+ *    expiry checks, or presenting password prompts.
+ * 3. Expired (time-based expiry)
+ * 4. Click Limit (maximum visit capacity)
+ * 5. Password Protection (hashed verification)
  */
 export async function evaluateLinkRules(
   link: {
@@ -136,7 +145,16 @@ export async function evaluateLinkRules(
     };
   }
 
-  // 2. Check expiration date
+  // 2. Check admin domain blocklist (platform safety overrides expiry/limits/passwords)
+  const blockCheck = await isDomainBlocked(link.destinationUrl);
+  if (blockCheck.isBlocked) {
+    return {
+      status: "BLOCKED",
+      reason: blockCheck.reason || "This destination domain has been blocked by administrators.",
+    };
+  }
+
+  // 3. Check expiration date
   if (link.expiresAt && new Date(link.expiresAt).getTime() <= Date.now()) {
     return {
       status: "EXPIRED",
@@ -211,10 +229,12 @@ export async function incrementClickCountAtomic(
  * Creates a new shortened link with validated URL, unique alias, rules, and optional campaign/tags.
  */
 export async function createLink(input: CreateLinkInput): Promise<LinkWithStats> {
-  const { destinationUrl, customAlias, userId, expiresAt, clickLimit, password, campaignId, tagIds } = input;
+  const { title, destinationUrl, customAlias, userId, expiresAt, clickLimit, password, campaignId, tagIds, skipRateLimit } = input;
 
-  // 1. Enforce rate limiting per user
-  await checkLinkCreationRateLimit(userId);
+  // 1. Enforce rate limiting per user (unless bypassed for bulk import)
+  if (!skipRateLimit) {
+    await checkLinkCreationRateLimit(userId);
+  }
 
   // 2. Validate destination URL
   const urlValidation = validateUrl(destinationUrl);
@@ -226,6 +246,16 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     );
   }
   const cleanUrl = urlValidation.normalizedUrl;
+
+  // 2b. Check against admin domain blocklist
+  const blockCheck = await isDomainBlocked(cleanUrl);
+  if (blockCheck.isBlocked) {
+    throw new LinkServiceError(
+      blockCheck.reason ? `Destination domain is blocked: ${blockCheck.reason}` : "Destination domain is blocked by platform policy.",
+      "BLOCKED_DOMAIN",
+      422
+    );
+  }
 
   let finalCode = "";
 
@@ -326,6 +356,7 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     data: {
       code: finalCode,
       destinationUrl: cleanUrl,
+      title: title ? title.trim() : null,
       userId,
       isActive: true,
       expiresAt: parsedExpiry,
@@ -375,6 +406,7 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     updatedAt: link.updatedAt,
     clicksCount: 0,
     uniqueVisitorsCount: 0,
+    qrScansCount: 0,
     state,
   };
 }
@@ -423,6 +455,28 @@ async function getUniqueVisitorsMap(linkIds: string[]): Promise<Map<string, numb
   return map;
 }
 
+async function getQrScansMap(linkIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (linkIds.length === 0) return map;
+
+  const grouped = await db.clickEvent.groupBy({
+    by: ["linkId"],
+    where: {
+      linkId: { in: linkIds },
+      source: "qr",
+    },
+    _count: {
+      _all: true,
+    },
+  });
+
+  for (const row of grouped) {
+    map.set(row.linkId, row._count._all);
+  }
+
+  return map;
+}
+
 /**
  * Get all links owned by a specific user with click counts, unique visitors, and optional campaign/tag filtering.
  */
@@ -459,7 +513,10 @@ export async function getUserLinks(
   });
 
   const linkIds = links.map((l) => l.id);
-  const uniqueMap = await getUniqueVisitorsMap(linkIds);
+  const [uniqueMap, qrMap] = await Promise.all([
+    getUniqueVisitorsMap(linkIds),
+    getQrScansMap(linkIds),
+  ]);
 
   return links.map((l) => {
     const state = computeLinkState({
@@ -486,6 +543,7 @@ export async function getUserLinks(
       updatedAt: l.updatedAt,
       clicksCount: l.clicksCount,
       uniqueVisitorsCount: uniqueMap.get(l.id) || 0,
+      qrScansCount: qrMap.get(l.id) || 0,
       state,
     };
   });
@@ -532,7 +590,10 @@ export async function getAllLinksAdmin(filters: LinkFilters = {}): Promise<LinkW
   });
 
   const linkIds = links.map((l) => l.id);
-  const uniqueMap = await getUniqueVisitorsMap(linkIds);
+  const [uniqueMap, qrMap] = await Promise.all([
+    getUniqueVisitorsMap(linkIds),
+    getQrScansMap(linkIds),
+  ]);
 
   return links.map((l) => {
     const state = computeLinkState({
@@ -559,6 +620,7 @@ export async function getAllLinksAdmin(filters: LinkFilters = {}): Promise<LinkW
       updatedAt: l.updatedAt,
       clicksCount: l.clicksCount,
       uniqueVisitorsCount: uniqueMap.get(l.id) || 0,
+      qrScansCount: qrMap.get(l.id) || 0,
       state,
       user: l.user,
     };
@@ -594,7 +656,18 @@ export async function updateLinkRules(
     if (!urlValidation.isValid || !urlValidation.normalizedUrl) {
       throw new LinkServiceError(urlValidation.error || "Invalid destination URL.", "INVALID_URL", 422);
     }
-    updateData.destinationUrl = urlValidation.normalizedUrl;
+    const cleanUrl = urlValidation.normalizedUrl;
+
+    const blockCheck = await isDomainBlocked(cleanUrl);
+    if (blockCheck.isBlocked) {
+      throw new LinkServiceError(
+        blockCheck.reason ? `Destination domain is blocked: ${blockCheck.reason}` : "Destination domain is blocked by platform policy.",
+        "BLOCKED_DOMAIN",
+        422
+      );
+    }
+
+    updateData.destinationUrl = cleanUrl;
   }
 
   if (input.isActive !== undefined) {

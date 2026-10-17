@@ -12,8 +12,10 @@ import {
   Clock,
   Gauge,
   Lock,
+  QrCode,
 } from "lucide-react";
 import { EditLinkModal } from "./EditLinkModal";
+import { QrModal } from "./QrModal";
 import { buildShortUrl } from "@/lib/utils/short-url";
 
 export type ComputedLinkState = "active" | "expired" | "limit_reached" | "disabled";
@@ -31,6 +33,7 @@ export interface LinkItem {
   state: ComputedLinkState;
   createdAt: string;
   clicksCount: number;
+  qrScansCount?: number;
   uniqueVisitorsCount: number;
   campaignId?: string | null;
   campaign?: { id: string; name: string } | null;
@@ -53,6 +56,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
+  const [qrModalLink, setQrModalLink] = useState<LinkItem | null>(null);
 
   const getFullShortUrl = (code: string) => buildShortUrl(code);
 
@@ -277,19 +281,28 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
 
                   {/* Visits & Unique Visitors */}
                   <td>
-                    <div className="flex items-center gap-2">
-                      <span className="badge badge-count" title="Total clicks">
-                        {link.clicksCount} {link.clicksCount === 1 ? "click" : "clicks"}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "0.775rem",
-                          color: "var(--text-muted)",
-                        }}
-                        title="Unique privacy-safe visitors"
-                      >
-                        ({link.uniqueVisitorsCount} unique)
-                      </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                      <div className="flex items-center gap-2">
+                        <span className="badge badge-count" title="Total visits">
+                          {link.clicksCount} {link.clicksCount === 1 ? "visit" : "visits"}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.775rem",
+                            color: "var(--text-muted)",
+                          }}
+                          title="Unique privacy-safe visitors"
+                        >
+                          ({link.uniqueVisitorsCount} unique)
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>
+                          {link.qrScansCount || 0} QR
+                        </span>
+                        {" · "}
+                        {Math.max(0, link.clicksCount - (link.qrScansCount || 0))} other
+                      </div>
                     </div>
                   </td>
 
@@ -351,6 +364,16 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
                   <td style={{ textAlign: "right" }}>
                     <div className="flex items-center justify-between" style={{ justifyContent: "flex-end", gap: "0.4rem" }}>
                       <button
+                        onClick={() => setQrModalLink(link)}
+                        disabled={isLoading}
+                        className="btn btn-secondary btn-sm"
+                        title="View and download QR code"
+                      >
+                        <QrCode size={13} />
+                        <span>QR</span>
+                      </button>
+
+                      <button
                         onClick={() => setEditingLink(link)}
                         disabled={isLoading}
                         className="btn btn-secondary btn-sm"
@@ -393,6 +416,14 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
           isOpen={true}
           onClose={() => setEditingLink(null)}
           onSaved={onRefresh}
+        />
+      )}
+
+      {qrModalLink && (
+        <QrModal
+          link={qrModalLink}
+          isOpen={true}
+          onClose={() => setQrModalLink(null)}
         />
       )}
     </>

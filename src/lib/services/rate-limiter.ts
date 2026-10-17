@@ -42,3 +42,39 @@ export async function checkLinkCreationRateLimit(userId: string): Promise<void> 
     );
   }
 }
+
+// Bulk import rate limiting: 10 imports per hour per user
+const MAX_BULK_IMPORTS_PER_HOUR = 10;
+const BULK_WINDOW_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
+const bulkImportTimestamps = new Map<string, number[]>();
+
+export async function checkBulkImportRateLimit(userId: string): Promise<void> {
+  const now = Date.now();
+  const windowStart = now - BULK_WINDOW_DURATION_MS;
+
+  const timestamps = (bulkImportTimestamps.get(userId) || []).filter(
+    (t) => t > windowStart
+  );
+
+  if (timestamps.length >= MAX_BULK_IMPORTS_PER_HOUR) {
+    const oldest = timestamps[0];
+    const retryAfter = Math.ceil((oldest + BULK_WINDOW_DURATION_MS - now) / 1000);
+    throw new RateLimitError(
+      `Bulk import rate limit exceeded: You can only perform ${MAX_BULK_IMPORTS_PER_HOUR} bulk imports per hour. Please try again later.`,
+      retryAfter > 0 ? retryAfter : 60
+    );
+  }
+
+  timestamps.push(now);
+  bulkImportTimestamps.set(userId, timestamps);
+}
+
+export function resetBulkImportRateLimitForTesting(userId?: string): void {
+  if (userId) {
+    bulkImportTimestamps.delete(userId);
+  } else {
+    bulkImportTimestamps.clear();
+  }
+}
+

@@ -25,6 +25,7 @@ model User {
   links        Link[]
   campaigns    Campaign[]
   tags         Tag[]
+  blockedDomains BlockedDomain[]
 
   @@index([email])
 }
@@ -79,11 +80,14 @@ model ClickEvent {
   country     String?  // Geo IP code (e.g. US, IN, GB)
   userAgent   String?  // Sanitized UA string
   visitorHash String?  // Salted SHA-256 hash of IP + User-Agent (privacy-safe)
+  source      String   @default("direct") // "qr" or "direct"
 
   @@index([linkId])
   @@index([timestamp])
   @@index([linkId, visitorHash])
   @@index([linkId, timestamp])
+  @@index([linkId, source])
+  @@index([source])
   @@index([device])
   @@index([browser])
 }
@@ -136,3 +140,14 @@ model LinkTag {
 
   @@id([linkId, tagId])
 }
+
+model BlockedDomain {
+  id          String   @id @default(cuid())
+  domain      String   @unique
+  reason      String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+

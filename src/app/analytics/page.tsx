@@ -18,6 +18,7 @@ import {
   ExternalLink,
   RefreshCw,
   Sliders,
+  QrCode,
 } from "lucide-react";
 import { AnalyticsReport, AnalyticsPeriod, LinkAlert } from "@/lib/services/analytics.service";
 import Link from "next/link";
@@ -297,6 +298,17 @@ export default function AnalyticsPage() {
 
         <div className="stat-card">
           <div className="flex items-center justify-between">
+            <span className="stat-title">QR Scans</span>
+            <QrCode size={18} color="var(--accent-secondary)" />
+          </div>
+          <div className="stat-value">{report?.metrics.qrScans ?? 0}</div>
+          <span style={{ fontSize: "0.775rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
+            {report?.metrics.qrScans ?? 0} QR · {report?.metrics.directClicks ?? 0} direct
+          </span>
+        </div>
+
+        <div className="stat-card">
+          <div className="flex items-center justify-between">
             <span className="stat-title">Campaign Groups</span>
             <Layers size={18} color="var(--accent-primary)" />
           </div>
@@ -471,6 +483,43 @@ export default function AnalyticsPage() {
             </div>
           ) : (
             <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>No referrer telemetry recorded yet.</p>
+          )}
+        </div>
+
+        {/* Traffic Source Split (QR vs Direct) */}
+        <div className="card">
+          <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <QrCode size={16} color="var(--accent-secondary)" />
+            <span>Visit Sources (QR vs Direct)</span>
+          </h3>
+
+          {report && (report.metrics.totalClicks > 0) ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              {report.sourceBreakdown.map((src) => (
+                <div key={src.name}>
+                  <div className="flex justify-between" style={{ fontSize: "0.85rem", marginBottom: "0.25rem" }}>
+                    <span>{src.name}</span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {src.count} ({src.percentage}%)
+                    </span>
+                  </div>
+                  <div style={{ width: "100%", height: "6px", backgroundColor: "rgba(255, 255, 255, 0.05)", borderRadius: "999px", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${src.percentage}%`,
+                        height: "100%",
+                        backgroundColor: src.name.toLowerCase().includes("qr") ? "var(--accent-secondary)" : "var(--accent-primary)",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem", marginBottom: 0 }}>
+                * Source marker is self-reported via ?src=qr.
+              </p>
+            </div>
+          ) : (
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>No source telemetry recorded yet.</p>
           )}
         </div>
       </div>
