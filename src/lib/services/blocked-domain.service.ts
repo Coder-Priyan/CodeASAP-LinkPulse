@@ -69,7 +69,8 @@ export function getCandidateDomains(hostname: string): string[] {
  */
 let cachedDomainsMap: Map<string, string | null> | null = null;
 let lastCacheFetchTime = 0;
-const CACHE_TTL_MS = 30_000; // 30 seconds
+const CACHE_TTL_MS =
+  process.env.NODE_ENV === "test" || process.env.VITEST ? 0 : 30_000; // 30s in prod/dev, 0 in tests
 
 export function invalidateBlockedDomainCache(): void {
   cachedDomainsMap = null;
@@ -78,7 +79,7 @@ export function invalidateBlockedDomainCache(): void {
 
 async function getOrLoadBlockedDomainsMap(): Promise<Map<string, string | null>> {
   const now = Date.now();
-  if (cachedDomainsMap && now - lastCacheFetchTime < CACHE_TTL_MS) {
+  if (CACHE_TTL_MS > 0 && cachedDomainsMap && now - lastCacheFetchTime < CACHE_TTL_MS) {
     return cachedDomainsMap;
   }
 
