@@ -64,8 +64,46 @@ export function getCandidateDomains(hostname: string): string[] {
 }
 
 /**
+ * In-memory cache of blocked domains for ultra-fast redirect path checks.
+ * Eliminates round-trips to remote Neon PostgreSQL on every redirect.
+ */
+let cachedDomainsMap: Map<string, string | null> | null = null;
+let lastCacheFetchTime = 0;
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+export function invalidateBlockedDomainCache(): void {
+  cachedDomainsMap = null;
+  lastCacheFetchTime = 0;
+}
+
+async function getOrLoadBlockedDomainsMap(): Promise<Map<string, string | null>> {
+  const now = Date.now();
+  if (cachedDomainsMap && now - lastCacheFetchTime < CACHE_TTL_MS) {
+    return cachedDomainsMap;
+  }
+
+  try {
+    const records = await db.blockedDomain.findMany({
+      select: { domain: true, reason: true },
+    });
+    const map = new Map<string, string | null>();
+    for (const r of records) {
+      map.set(r.domain, r.reason);
+    }
+    cachedDomainsMap = map;
+    lastCacheFetchTime = now;
+    return map;
+  } catch (err) {
+    if (cachedDomainsMap) {
+      return cachedDomainsMap;
+    }
+    throw err;
+  }
+}
+
+/**
  * Fast indexed check if a destination URL belongs to a blocked domain or subdomain.
- * Performs a single indexed query seeking matching parent domains.
+ * Uses in-memory cached domain map with automatic invalidation on add/remove.
  */
 export async function isDomainBlocked(
   destinationUrl: string
@@ -85,18 +123,15 @@ export async function isDomainBlocked(
       return { isBlocked: false };
     }
 
-    const match = await db.blockedDomain.findFirst({
-      where: {
-        domain: { in: candidateDomains },
-      },
-    });
-
-    if (match) {
-      return {
-        isBlocked: true,
-        matchedDomain: match.domain,
-        reason: match.reason || "This domain is restricted by platform policy.",
-      };
+    const domainMap = await getOrLoadBlockedDomainsMap();
+    for (const candidate of candidateDomains) {
+      if (domainMap.has(candidate)) {
+        return {
+          isBlocked: true,
+          matchedDomain: candidate,
+          reason: domainMap.get(candidate) || "This domain is restricted by platform policy.",
+        };
+      }
     }
 
     return { isBlocked: false };
@@ -133,7 +168,7 @@ export async function addBlockedDomain(
   }
 
   try {
-    return await db.blockedDomain.create({
+    const created = await db.blockedDomain.create({
       data: {
         domain: normalized,
         reason: reason?.trim() || null,
@@ -145,6 +180,8 @@ export async function addBlockedDomain(
         },
       },
     });
+    invalidateBlockedDomainCache();
+    return created;
   } catch (err: any) {
     if (err?.code === "P2002") {
       throw new BlockedDomainError("This domain is already in the blocklist.", "DUPLICATE_DOMAIN", 409);
@@ -168,6 +205,7 @@ export async function removeBlockedDomain(id: string) {
   await db.blockedDomain.delete({
     where: { id },
   });
+  invalidateBlockedDomainCache();
 
   return { success: true };
 }
