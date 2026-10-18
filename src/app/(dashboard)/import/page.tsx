@@ -56,9 +56,23 @@ export default function CsvImportPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [campaigns, setCampaigns] = useState<Array<{ id: string; name: string }>>([]);
+  const [tags, setTags] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   useEffect(() => {
     document.title = "CSV Import | LinkPulse";
+
+    fetch("/api/campaigns")
+      .then((res) => res.json())
+      .then((data) => setCampaigns(data.campaigns || []))
+      .catch(() => {});
+
+    fetch("/api/tags")
+      .then((res) => res.json())
+      .then((data) => setTags(data.tags || []))
+      .catch(() => {});
   }, []);
 
   const handleDownloadTemplate = () => {
@@ -173,7 +187,11 @@ export default function CsvImportPage() {
       const res = await fetch("/api/links/import/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csvContent }),
+        body: JSON.stringify({
+          csvContent,
+          campaignId: selectedCampaignId || undefined,
+          tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        }),
       });
 
       const data = await res.json();
@@ -392,6 +410,86 @@ export default function CsvImportPage() {
               )}
             </button>
           </div>
+
+          {/* Batch Organization Options */}
+          {(campaigns.length > 0 || tags.length > 0) && (
+            <div
+              style={{
+                background: "var(--color-bg)",
+                border: "2px solid var(--color-ink)",
+                borderRadius: "var(--radius-md)",
+                padding: "0.85rem 1rem",
+                marginBottom: "1.25rem",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: "0.85rem", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Sparkles size={14} style={{ color: "var(--color-primary)" }} />
+                <span>Batch Organization (Optional)</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
+                {campaigns.length > 0 && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.3rem" }}>
+                      Assign to Campaign:
+                    </label>
+                    <select
+                      className="input"
+                      value={selectedCampaignId || ""}
+                      onChange={(e) => setSelectedCampaignId(e.target.value || null)}
+                      style={{ width: "100%", fontSize: "0.85rem", padding: "0.35rem 0.5rem" }}
+                    >
+                      <option value="">No Campaign</option>
+                      {campaigns.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {tags.length > 0 && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.3rem" }}>
+                      Apply Tags:
+                    </label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                      {tags.map((t) => {
+                        const isSelected = selectedTagIds.includes(t.id);
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTagIds((prev) =>
+                                isSelected ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                              );
+                            }}
+                            className="badge"
+                            style={{
+                              cursor: "pointer",
+                              border: "2px solid var(--color-ink)",
+                              background: isSelected ? "var(--color-primary)" : "var(--color-paper)",
+                              color: isSelected ? "var(--color-paper)" : "var(--color-ink)",
+                              fontWeight: 700,
+                              fontSize: "0.75rem",
+                              padding: "0.2rem 0.45rem",
+                              borderRadius: "var(--radius-sm)",
+                              transition: "all 0.15s ease",
+                            }}
+                          >
+                            {isSelected ? "✓ " : "+ "}
+                            {t.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="table-wrapper">
             <table className="data-table">

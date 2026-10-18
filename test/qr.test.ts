@@ -106,6 +106,14 @@ describe("Milestone 4: QR Codes with Scan Tracking", () => {
     expect(svgString).toContain("</svg>");
   });
 
+  it("supports custom size/width parameter for high-resolution output", async () => {
+    const code = "qr-custom-size-test";
+    const standardBuffer = await generateQrPng(code, 360);
+    const hiResBuffer = await generateQrPng(code, 1024);
+    expect(hiResBuffer).toBeInstanceOf(Buffer);
+    expect(hiResBuffer.length).toBeGreaterThan(standardBuffer.length);
+  });
+
   it("enforces RBAC on QR endpoint: owner and admin succeed, another user gets 403", async () => {
     const link = await db.link.create({
       data: {

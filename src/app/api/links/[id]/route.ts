@@ -21,6 +21,7 @@ export async function PATCH(
     }
 
     const updated = await updateLinkRules(id, user.userId, user.role, {
+      title: body.title !== undefined ? body.title : undefined,
       destinationUrl: body.destinationUrl,
       isActive: body.isActive,
       expiresAt: body.expiresAt,

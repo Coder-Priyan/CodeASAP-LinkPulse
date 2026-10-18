@@ -278,4 +278,32 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
     expect(dbLink?.tags).toHaveLength(1);
     expect(dbLink?.tags[0].tagId).toBe(tag1.id);
   });
+
+  it("updates the link title via PATCH /api/links/[id]", async () => {
+    const link = await db.link.create({
+      data: {
+        code: `test-patch-title-${Date.now()}`,
+        destinationUrl: "https://my-safe-patch-domain.org/initial",
+        title: "Old Title",
+        userId: user1.id,
+      },
+    });
+    createdLinkIds.push(link.id);
+
+    const req = new NextRequest(`http://localhost:3000/api/links/${link.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Brand New Title",
+      }),
+    });
+
+    const res = await PATCH(req, { params: Promise.resolve({ id: link.id }) });
+    expect(res.status).toBe(200);
+
+    const dbLink = await db.link.findUnique({
+      where: { id: link.id },
+    });
+    expect(dbLink?.title).toBe("Brand New Title");
+  });
 });

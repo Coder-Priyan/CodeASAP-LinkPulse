@@ -312,4 +312,49 @@ describe("Milestone 4: CSV Bulk Import", () => {
     });
     expect(unallowedLink).toBeNull();
   });
+
+  it("applies optional batch campaignId and tagIds to all imported links", async () => {
+    const ts = Date.now();
+    const campaign = await db.campaign.create({
+      data: {
+        name: `Import Campaign ${ts}`,
+        userId: testUserId,
+      },
+    });
+
+    const tag = await db.tag.create({
+      data: {
+        name: `batch-tag-${ts}`,
+        userId: testUserId,
+      },
+    });
+
+    const csvContent =
+      "destination_url,alias,title\n" +
+      `https://batch-import-test.org/link1,batch-link1-${ts},Batch Link 1\n` +
+      `https://batch-import-test.org/link2,batch-link2-${ts},Batch Link 2`;
+
+    const summary = await executeCsvImport(csvContent, testUserId, {
+      campaignId: campaign.id,
+      tagIds: [tag.id],
+    });
+
+    expect(summary.totalRows).toBe(2);
+    expect(summary.createdCount).toBe(2);
+    expect(summary.skippedCount).toBe(0);
+
+    for (const item of summary.created) {
+      createdLinkIds.push(item.id);
+      const linkInDb = await db.link.findUnique({
+        where: { id: item.id },
+        include: { tags: true },
+      });
+      expect(linkInDb?.campaignId).toBe(campaign.id);
+      expect(linkInDb?.tags).toHaveLength(1);
+      expect(linkInDb?.tags[0].tagId).toBe(tag.id);
+    }
+
+    await db.campaign.delete({ where: { id: campaign.id } });
+    await db.tag.delete({ where: { id: tag.id } });
+  });
 });

@@ -10,6 +10,9 @@ export async function POST(request: NextRequest) {
     let csvContent = "";
     const contentType = request.headers.get("content-type") || "";
 
+    let campaignId: string | null = null;
+    let tagIds: string[] | undefined = undefined;
+
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const file = formData.get("file");
@@ -20,6 +23,16 @@ export async function POST(request: NextRequest) {
         );
       }
       csvContent = await (file as Blob).text();
+      const camp = formData.get("campaignId");
+      if (camp && typeof camp === "string") campaignId = camp;
+      const rawTags = formData.get("tagIds");
+      if (rawTags && typeof rawTags === "string") {
+        try {
+          tagIds = JSON.parse(rawTags);
+        } catch {
+          tagIds = undefined;
+        }
+      }
     } else {
       let body: any;
       try {
@@ -28,6 +41,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
       }
       csvContent = body?.csvContent;
+      campaignId = body?.campaignId || null;
+      tagIds = Array.isArray(body?.tagIds) ? body.tagIds : undefined;
     }
 
     if (!csvContent || typeof csvContent !== "string") {
@@ -37,7 +52,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const summary = await executeCsvImport(csvContent, user.userId);
+    const summary = await executeCsvImport(csvContent, user.userId, {
+      campaignId,
+      tagIds,
+    });
     return NextResponse.json({ success: true, summary });
   } catch (error: any) {
     if (error instanceof AuthError) {

@@ -297,7 +297,8 @@ export async function previewCsvImport(
  */
 export async function executeCsvImport(
   csvContent: string,
-  userId: string
+  userId: string,
+  options?: { campaignId?: string | null; tagIds?: string[] }
 ): Promise<CsvImportSummary> {
   // 1. Enforce bulk import rate limit (e.g. 10 bulk imports per hour per user)
   await checkBulkImportRateLimit(userId);
@@ -331,6 +332,8 @@ export async function executeCsvImport(
         customAlias: row.rawAlias || undefined,
         title: row.sanitizedTitle || null,
         userId,
+        campaignId: options?.campaignId || null,
+        tagIds: options?.tagIds,
         skipRateLimit: true,
       });
 

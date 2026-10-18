@@ -26,6 +26,7 @@ interface TagOption {
 export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const [title, setTitle] = useState(link.title || "");
   const [destinationUrl, setDestinationUrl] = useState(link.destinationUrl);
   const [isActive, setIsActive] = useState(link.isActive);
   const [disabledReason, setDisabledReason] = useState(link.disabledReason || "");
@@ -133,6 +134,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title: title.trim() || null,
           destinationUrl: destinationUrl.trim(),
           isActive,
           disabledReason: isActive ? null : disabledReason.trim() || "Disabled by user",
@@ -212,6 +214,21 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
         )}
 
         <form onSubmit={handleSubmit}>
+          {/* Link Title */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="editTitle">
+              Link Title (Optional)
+            </label>
+            <input
+              id="editTitle"
+              type="text"
+              className="form-input"
+              placeholder="e.g. Marketing Landing Page"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
           {/* Destination URL */}
           <div className="form-group">
             <label className="form-label flex items-center gap-2" htmlFor="editDest">

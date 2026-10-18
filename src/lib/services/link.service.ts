@@ -40,6 +40,7 @@ export interface CreateLinkInput {
 }
 
 export interface UpdateLinkRulesInput {
+  title?: string | null;
   destinationUrl?: string;
   isActive?: boolean;
   expiresAt?: Date | string | null;
@@ -650,6 +651,10 @@ export async function updateLinkRules(
   }
 
   const updateData: Prisma.LinkUpdateInput = {};
+
+  if (input.title !== undefined) {
+    updateData.title = input.title && input.title.trim() ? input.title.trim() : null;
+  }
 
   if (input.destinationUrl !== undefined) {
     const urlValidation = validateUrl(input.destinationUrl);
