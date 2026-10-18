@@ -112,7 +112,7 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
     const link = await db.link.create({
       data: {
         code: `test-patch-ok-${Date.now()}`,
-        destinationUrl: "https://example.com/initial",
+        destinationUrl: "https://pulse-safe-test-target.org/initial",
         userId: user1.id,
       },
     });
@@ -151,7 +151,7 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
     const link = await db.link.create({
       data: {
         code: `test-patch-camp-rej-${Date.now()}`,
-        destinationUrl: "https://example.com/camp-check",
+        destinationUrl: "https://pulse-safe-test-target.org/camp-check",
         userId: user1.id,
         campaignId: camp1.id,
       },
@@ -181,7 +181,7 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
     const link = await db.link.create({
       data: {
         code: `test-patch-tag-rej-${Date.now()}`,
-        destinationUrl: "https://example.com/tag-check",
+        destinationUrl: "https://pulse-safe-test-target.org/tag-check",
         userId: user1.id,
         tags: {
           create: [{ tagId: tag1.id }],
@@ -214,7 +214,7 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
     const link = await db.link.create({
       data: {
         code: `test-patch-clear-${Date.now()}`,
-        destinationUrl: "https://example.com/clear",
+        destinationUrl: "https://pulse-safe-test-target.org/clear",
         userId: user1.id,
         campaignId: camp1.id,
         tags: {
@@ -248,7 +248,7 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
     const link = await db.link.create({
       data: {
         code: `test-patch-preserve-${Date.now()}`,
-        destinationUrl: "https://example.com/before",
+        destinationUrl: "https://pulse-safe-test-target.org/before",
         userId: user1.id,
         campaignId: camp1.id,
         tags: {
@@ -262,7 +262,7 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        destinationUrl: "https://example.com/after",
+        destinationUrl: "https://pulse-safe-test-target.org/after",
       }),
     });
 
@@ -273,9 +273,108 @@ describe("10. Link PATCH Campaign and Tag Updates", () => {
       where: { id: link.id },
       include: { tags: true },
     });
-    expect(dbLink?.destinationUrl).toBe("https://example.com/after");
+    expect(dbLink?.destinationUrl).toBe("https://pulse-safe-test-target.org/after");
     expect(dbLink?.campaignId).toBe(camp1.id);
     expect(dbLink?.tags).toHaveLength(1);
     expect(dbLink?.tags[0].tagId).toBe(tag1.id);
+  });
+
+  it("updates the link title via PATCH /api/links/[id] with trimming and empty-to-null rules", async () => {
+    const link = await db.link.create({
+      data: {
+        code: `test-patch-title-${Date.now()}`,
+        destinationUrl: "https://my-safe-patch-domain.org/initial",
+        title: "Old Title",
+        userId: user1.id,
+      },
+    });
+    createdLinkIds.push(link.id);
+
+    // 1. Updating with leading/trailing spaces trims the title
+    const req1 = new NextRequest(`http://localhost:3000/api/links/${link.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "   Trimmed Brand Title   ",
+      }),
+    });
+    const res1 = await PATCH(req1, { params: Promise.resolve({ id: link.id }) });
+    expect(res1.status).toBe(200);
+
+    let dbLink = await db.link.findUnique({ where: { id: link.id } });
+    expect(dbLink?.title).toBe("Trimmed Brand Title");
+
+    // 2. Updating with empty string or whitespace sets title to null
+    const req2 = new NextRequest(`http://localhost:3000/api/links/${link.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "     ",
+      }),
+    });
+    const res2 = await PATCH(req2, { params: Promise.resolve({ id: link.id }) });
+    expect(res2.status).toBe(200);
+
+    dbLink = await db.link.findUnique({ where: { id: link.id } });
+    expect(dbLink?.title).toBeNull();
+  });
+
+  it("rejects title exceeding 255 characters with 422 INVALID_TITLE", async () => {
+    const link = await db.link.create({
+      data: {
+        code: `test-patch-len-${Date.now()}`,
+        destinationUrl: "https://my-safe-patch-domain.org/initial",
+        title: "Initial Title",
+        userId: user1.id,
+      },
+    });
+    createdLinkIds.push(link.id);
+
+    const longTitle = "A".repeat(256);
+    const req = new NextRequest(`http://localhost:3000/api/links/${link.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: longTitle,
+      }),
+    });
+
+    const res = await PATCH(req, { params: Promise.resolve({ id: link.id }) });
+    expect(res.status).toBe(422);
+
+    const data = await res.json();
+    expect(data.code).toBe("INVALID_TITLE");
+  });
+
+  it("enforces ownership on PATCH: non-owner gets 403 Forbidden", async () => {
+    const link = await db.link.create({
+      data: {
+        code: `test-patch-owner-${Date.now()}`,
+        destinationUrl: "https://my-safe-patch-domain.org/initial",
+        title: "Owner's Link",
+        userId: user1.id,
+      },
+    });
+    createdLinkIds.push(link.id);
+
+    // Switch mock session user to user2 (non-owner)
+    mockUser = { userId: user2.id, email: user2.email, role: Role.USER };
+
+    const req = new NextRequest(`http://localhost:3000/api/links/${link.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Hacked Title",
+      }),
+    });
+
+    const res = await PATCH(req, { params: Promise.resolve({ id: link.id }) });
+    expect(res.status).toBe(403);
+
+    const data = await res.json();
+    expect(data.error).toMatch(/permission denied/i);
+
+    // Switch back to user1
+    mockUser = { userId: user1.id, email: user1.email, role: Role.USER };
   });
 });

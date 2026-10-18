@@ -31,6 +31,12 @@ export interface CreateLinkInput {
   destinationUrl: string;
   customAlias?: string;
   userId: string;
+  user?: {
+    id: string;
+    email: string;
+    name?: string | null;
+    role: Role;
+  };
   expiresAt?: Date | string | null;
   clickLimit?: number | null;
   password?: string | null;
@@ -40,6 +46,7 @@ export interface CreateLinkInput {
 }
 
 export interface UpdateLinkRulesInput {
+  title?: string | null;
   destinationUrl?: string;
   isActive?: boolean;
   expiresAt?: Date | string | null;
@@ -54,6 +61,21 @@ export interface UpdateLinkRulesInput {
 export interface LinkFilters {
   campaignId?: string;
   tagId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Trims, enforces max length (255 chars), and converts empty title strings to null.
+ */
+export function sanitizeLinkTitle(title?: string | null): string | null {
+  if (title === undefined || title === null) return null;
+  const trimmed = String(title).trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > 255) {
+    throw new LinkServiceError("Link title cannot exceed 255 characters.", "INVALID_TITLE", 422);
+  }
+  return trimmed;
 }
 
 export interface TagSummary {
@@ -231,12 +253,7 @@ export async function incrementClickCountAtomic(
 export async function createLink(input: CreateLinkInput): Promise<LinkWithStats> {
   const { title, destinationUrl, customAlias, userId, expiresAt, clickLimit, password, campaignId, tagIds, skipRateLimit } = input;
 
-  // 1. Enforce rate limiting per user (unless bypassed for bulk import)
-  if (!skipRateLimit) {
-    await checkLinkCreationRateLimit(userId);
-  }
-
-  // 2. Validate destination URL
+  // 1. Synchronous URL and Alias syntax validation
   const urlValidation = validateUrl(destinationUrl);
   if (!urlValidation.isValid || !urlValidation.normalizedUrl) {
     throw new LinkServiceError(
@@ -247,19 +264,7 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
   }
   const cleanUrl = urlValidation.normalizedUrl;
 
-  // 2b. Check against admin domain blocklist
-  const blockCheck = await isDomainBlocked(cleanUrl);
-  if (blockCheck.isBlocked) {
-    throw new LinkServiceError(
-      blockCheck.reason ? `Destination domain is blocked: ${blockCheck.reason}` : "Destination domain is blocked by platform policy.",
-      "BLOCKED_DOMAIN",
-      422
-    );
-  }
-
-  let finalCode = "";
-
-  // 3. Validate custom alias if provided
+  let sanitizedAlias: string | undefined;
   if (customAlias && customAlias.trim().length > 0) {
     const aliasValidation = validateCustomAlias(customAlias);
     if (!aliasValidation.isValid || !aliasValidation.sanitizedAlias) {
@@ -269,49 +274,10 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
         422
       );
     }
-    const sanitized = aliasValidation.sanitizedAlias;
-
-    // Check if alias is already taken
-    const existing = await db.link.findUnique({
-      where: { code: sanitized },
-      select: { id: true },
-    });
-
-    if (existing) {
-      throw new LinkServiceError(
-        `Alias "${sanitized}" is already in use. Please pick another one.`,
-        "DUPLICATE_ALIAS",
-        409
-      );
-    }
-
-    finalCode = sanitized;
-  } else {
-    // 4. Generate unique random short code with collision avoidance retry
-    let attempts = 0;
-    const maxAttempts = 5;
-    let uniqueFound = false;
-
-    while (attempts < maxAttempts && !uniqueFound) {
-      const candidate = generateShortCode(6);
-      const existing = await db.link.findUnique({
-        where: { code: candidate },
-        select: { id: true },
-      });
-
-      if (!existing) {
-        finalCode = candidate;
-        uniqueFound = true;
-      }
-      attempts++;
-    }
-
-    if (!uniqueFound) {
-      finalCode = generateShortCode(7);
-    }
+    sanitizedAlias = aliasValidation.sanitizedAlias;
   }
 
-  // 5. Parse rules: Expiry, Click Limit, Password
+  // 2. Synchronous validation for rules
   let parsedExpiry: Date | null = null;
   if (expiresAt) {
     parsedExpiry = new Date(expiresAt);
@@ -331,54 +297,99 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     }
   }
 
-  let passwordHash: string | null = null;
-  if (password && password.trim().length > 0) {
-    if (password.length < 4) {
-      throw new LinkServiceError("Link password must be at least 4 characters.", "INVALID_PASSWORD", 422);
-    }
-    passwordHash = await bcrypt.hash(password, 12);
+  if (password && password.trim().length > 0 && password.length < 4) {
+    throw new LinkServiceError("Link password must be at least 4 characters.", "INVALID_PASSWORD", 422);
   }
 
-  // 6. Verify Campaign ownership if provided
-  let validCampaignId: string | null = null;
+  const cleanTitle = sanitizeLinkTitle(title);
+  const uniqueTagIds = tagIds && tagIds.length > 0 ? Array.from(new Set(tagIds)) : [];
+
+  // Generate candidate short code (or use sanitized custom alias)
+  const candidateCode = sanitizedAlias || generateShortCode(6);
+
+  // 3. Parallelize all independent database & CPU checks concurrently
+  const [, blockCheck, codeConflict, passwordHash, campResult, userTags] = await Promise.all([
+    !skipRateLimit ? checkLinkCreationRateLimit(userId) : Promise.resolve(),
+    isDomainBlocked(cleanUrl),
+    db.link.findUnique({ where: { code: candidateCode }, select: { id: true } }),
+    password && password.trim().length > 0 ? bcrypt.hash(password, 12) : Promise.resolve(null),
+    campaignId ? db.campaign.findUnique({ where: { id: campaignId }, select: { id: true, name: true, userId: true } }) : Promise.resolve(null),
+    uniqueTagIds.length > 0 ? db.tag.findMany({ where: { id: { in: uniqueTagIds }, userId }, select: { id: true, name: true, color: true } }) : Promise.resolve([]),
+  ]);
+
+  if (blockCheck.isBlocked) {
+    throw new LinkServiceError(
+      blockCheck.reason ? `Destination domain is blocked: ${blockCheck.reason}` : "Destination domain is blocked by platform policy.",
+      "BLOCKED_DOMAIN",
+      422
+    );
+  }
+
+  let finalCode = candidateCode;
+  if (codeConflict) {
+    if (sanitizedAlias) {
+      throw new LinkServiceError(
+        `Alias "${sanitizedAlias}" is already in use. Please pick another one.`,
+        "DUPLICATE_ALIAS",
+        409
+      );
+    }
+    // Rare collision on random 6-character code: retry
+    let attempts = 0;
+    let uniqueFound = false;
+    while (attempts < 5 && !uniqueFound) {
+      const candidate = generateShortCode(attempts < 4 ? 6 : 7);
+      const existing = await db.link.findUnique({ where: { code: candidate }, select: { id: true } });
+      if (!existing) {
+        finalCode = candidate;
+        uniqueFound = true;
+      }
+      attempts++;
+    }
+  }
+
   if (campaignId) {
-    const camp = await db.campaign.findUnique({
-      where: { id: campaignId },
-      select: { id: true, userId: true },
-    });
-    if (camp && camp.userId === userId) {
-      validCampaignId = camp.id;
+    if (!campResult || campResult.userId !== userId) {
+      throw new LinkServiceError("Campaign does not exist or access denied.", "FORBIDDEN", 403);
     }
   }
 
-  // 7. Create the link entity with relations
+  if (uniqueTagIds.length > 0) {
+    if (userTags.length !== uniqueTagIds.length) {
+      throw new LinkServiceError("One or more tags do not exist or access denied.", "FORBIDDEN", 403);
+    }
+  }
+
+  // 4. Create the link entity with pruned select (avoids Prisma multi-statement SELECT waterfalls)
   const link = await db.link.create({
     data: {
       code: finalCode,
       destinationUrl: cleanUrl,
-      title: title ? title.trim() : null,
+      title: cleanTitle,
       userId,
       isActive: true,
       expiresAt: parsedExpiry,
       clickLimit: parsedLimit,
       passwordHash,
       clicksCount: 0,
-      campaignId: validCampaignId,
-      tags: tagIds && tagIds.length > 0 ? {
-        create: tagIds.map((tagId) => ({ tagId })),
+      campaignId: campResult?.id || null,
+      tags: uniqueTagIds.length > 0 ? {
+        create: uniqueTagIds.map((tagId) => ({ tagId })),
       } : undefined,
     },
-    include: {
-      campaign: {
-        select: { id: true, name: true },
-      },
-      tags: {
-        select: {
-          tag: {
-            select: { id: true, name: true, color: true },
-          },
-        },
-      },
+    select: {
+      id: true,
+      code: true,
+      destinationUrl: true,
+      title: true,
+      isActive: true,
+      disabledReason: true,
+      expiresAt: true,
+      clickLimit: true,
+      passwordHash: true,
+      campaignId: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
 
@@ -388,6 +399,25 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     clickLimit: link.clickLimit,
     clicksCount: 0,
   });
+
+  const campaignSummary: CampaignSummary | null = campResult
+    ? { id: campResult.id, name: campResult.name }
+    : null;
+
+  const tagSummaries: TagSummary[] = userTags.map((t) => ({
+    id: t.id,
+    name: t.name,
+    color: t.color,
+  }));
+
+  const userSummary = input.user
+    ? {
+        id: input.user.id,
+        email: input.user.email,
+        name: input.user.name ?? null,
+        role: input.user.role,
+      }
+    : undefined;
 
   return {
     id: link.id,
@@ -400,14 +430,15 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     clickLimit: link.clickLimit,
     hasPassword: Boolean(link.passwordHash),
     campaignId: link.campaignId,
-    campaign: link.campaign,
-    tags: link.tags.map((t) => t.tag),
+    campaign: campaignSummary,
+    tags: tagSummaries,
     createdAt: link.createdAt,
     updatedAt: link.updatedAt,
     clicksCount: 0,
     uniqueVisitorsCount: 0,
     qrScansCount: 0,
     state,
+    user: userSummary,
   };
 }
 
@@ -497,7 +528,9 @@ export async function getUserLinks(
 
   const links = await db.link.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: filters.limit,
+    skip: filters.offset,
     include: {
       campaign: {
         select: { id: true, name: true },
@@ -566,7 +599,9 @@ export async function getAllLinksAdmin(filters: LinkFilters = {}): Promise<LinkW
 
   const links = await db.link.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: filters.limit,
+    skip: filters.offset,
     include: {
       user: {
         select: {
@@ -650,6 +685,10 @@ export async function updateLinkRules(
   }
 
   const updateData: Prisma.LinkUpdateInput = {};
+
+  if (input.title !== undefined) {
+    updateData.title = sanitizeLinkTitle(input.title);
+  }
 
   if (input.destinationUrl !== undefined) {
     const urlValidation = validateUrl(input.destinationUrl);
@@ -753,14 +792,42 @@ export async function updateLinkRules(
     }
   }
 
-  return db.link.update({
+  const updated = await db.link.update({
     where: { id: linkId },
     data: updateData,
     include: {
+      user: { select: { id: true, email: true, name: true, role: true } },
       campaign: { select: { id: true, name: true } },
       tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
     },
   });
+
+  const state = computeLinkState({
+    isActive: updated.isActive,
+    expiresAt: updated.expiresAt,
+    clickLimit: updated.clickLimit,
+    clicksCount: updated.clicksCount,
+  });
+
+  return {
+    id: updated.id,
+    code: updated.code,
+    destinationUrl: updated.destinationUrl,
+    title: updated.title,
+    isActive: updated.isActive,
+    disabledReason: updated.disabledReason,
+    expiresAt: updated.expiresAt,
+    clickLimit: updated.clickLimit,
+    hasPassword: Boolean(updated.passwordHash),
+    campaignId: updated.campaignId,
+    campaign: updated.campaign,
+    tags: updated.tags.map((t) => t.tag),
+    createdAt: updated.createdAt,
+    updatedAt: updated.updatedAt,
+    clicksCount: updated.clicksCount,
+    state,
+    user: updated.user,
+  };
 }
 
 /**

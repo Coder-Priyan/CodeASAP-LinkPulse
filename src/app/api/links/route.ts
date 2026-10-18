@@ -16,8 +16,47 @@ export async function GET(request: NextRequest) {
     const scope = searchParams.get("scope");
     const campaignId = searchParams.get("campaignId") || undefined;
     const tagId = searchParams.get("tagId") || undefined;
+    const limitParam = searchParams.get("limit");
+    const offsetParam = searchParams.get("offset");
 
-    const filters = { campaignId, tagId };
+    let limit: number | undefined = undefined;
+    if (limitParam !== null) {
+      const parsed = Number(limitParam);
+      if (!Number.isInteger(parsed) || parsed < 1 || isNaN(parsed)) {
+        return NextResponse.json(
+          { error: "Query parameter 'limit' must be a positive integer." },
+          { status: 400 }
+        );
+      }
+      const isAdminScope = scope === "all" && user.role === Role.ADMIN;
+      if (parsed > 100 && !isAdminScope) {
+        return NextResponse.json(
+          { error: "Query parameter 'limit' cannot exceed maximum cap of 100." },
+          { status: 400 }
+        );
+      }
+      if (parsed > 10000 && isAdminScope) {
+        return NextResponse.json(
+          { error: "Query parameter 'limit' cannot exceed maximum cap of 10000." },
+          { status: 400 }
+        );
+      }
+      limit = parsed;
+    }
+
+    let offset: number | undefined = undefined;
+    if (offsetParam !== null) {
+      const parsed = Number(offsetParam);
+      if (!Number.isInteger(parsed) || parsed < 0 || isNaN(parsed)) {
+        return NextResponse.json(
+          { error: "Query parameter 'offset' must be a non-negative integer." },
+          { status: 400 }
+        );
+      }
+      offset = parsed;
+    }
+
+    const filters = { campaignId, tagId, limit, offset };
 
     if (scope === "all" && user.role === Role.ADMIN) {
       const allLinks = await getAllLinksAdmin(filters);
@@ -54,6 +93,12 @@ export async function POST(request: NextRequest) {
       destinationUrl,
       customAlias: customAlias ? String(customAlias) : undefined,
       userId: user.userId,
+      user: {
+        id: user.userId,
+        email: user.email,
+        name: (user as any).name ?? null,
+        role: user.role,
+      },
       expiresAt: expiresAt || null,
       clickLimit: clickLimit !== undefined && clickLimit !== null && clickLimit !== "" ? Number(clickLimit) : null,
       password: password ? String(password) : null,

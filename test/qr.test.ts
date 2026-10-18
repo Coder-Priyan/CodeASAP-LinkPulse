@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { db } from "@/lib/db";
 import { Role } from "@prisma/client";
-import { generateQrPng, generateQrSvg, getQrTargetUrl } from "@/lib/services/qr.service";
+import { generateQrPng, generateQrSvg, getQrTargetUrl, normalizeQrSize } from "@/lib/services/qr.service";
 import { recordClick } from "@/lib/services/click.service";
 import { evaluateLinkRules, incrementClickCountAtomic } from "@/lib/services/link.service";
 import { NextRequest } from "next/server";
@@ -106,11 +106,50 @@ describe("Milestone 4: QR Codes with Scan Tracking", () => {
     expect(svgString).toContain("</svg>");
   });
 
+  it("supports custom size/width parameter for high-resolution output", async () => {
+    const code = "qr-custom-size-test";
+    const standardBuffer = await generateQrPng(code, 360);
+    const hiResBuffer = await generateQrPng(code, 1024);
+    expect(hiResBuffer).toBeInstanceOf(Buffer);
+    expect(hiResBuffer.length).toBeGreaterThan(standardBuffer.length);
+  });
+
+  it("handles NaN, empty, negative, and non-numeric size values by falling back to 360 and clamping [120, 2048]", () => {
+    expect(normalizeQrSize(NaN)).toBe(360);
+    expect(normalizeQrSize("")).toBe(360);
+    expect(normalizeQrSize("   ")).toBe(360);
+    expect(normalizeQrSize("abc")).toBe(360);
+    expect(normalizeQrSize(undefined)).toBe(360);
+    expect(normalizeQrSize(null)).toBe(360);
+    expect(normalizeQrSize(-100)).toBe(360);
+    expect(normalizeQrSize(0)).toBe(360);
+    expect(normalizeQrSize("500")).toBe(500);
+    expect(normalizeQrSize(50)).toBe(120); // clamped to min 120
+    expect(normalizeQrSize(5000)).toBe(2048); // clamped to max 2048
+  });
+
+  it("confirms PNG and SVG at every size still encode ?src=qr", async () => {
+    const code = "qr-encode-check";
+    const targetUrl = getQrTargetUrl(code);
+    expect(targetUrl).toContain("?src=qr");
+
+    const sizes = [120, 360, 1024, 2048];
+    for (const s of sizes) {
+      const svg = await generateQrSvg(targetUrl, s);
+      expect(svg).toContain("<svg");
+      expect(svg).toContain("</svg>");
+
+      const png = await generateQrPng(targetUrl, s);
+      expect(png).toBeInstanceOf(Buffer);
+      expect(png.length).toBeGreaterThan(100);
+    }
+  });
+
   it("enforces RBAC on QR endpoint: owner and admin succeed, another user gets 403", async () => {
     const link = await db.link.create({
       data: {
         code: `qr-rbac-${Date.now()}`,
-        destinationUrl: "https://example.com/qr-rbac",
+        destinationUrl: "https://pulse-safe-test-target.org/qr-rbac",
         userId: ownerUser.id,
       },
     });
@@ -143,7 +182,7 @@ describe("Milestone 4: QR Codes with Scan Tracking", () => {
     const link = await db.link.create({
       data: {
         code: `qr-src-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: ownerUser.id,
       },
     });
@@ -167,7 +206,7 @@ describe("Milestone 4: QR Codes with Scan Tracking", () => {
     const link = await db.link.create({
       data: {
         code: `qr-allowlist-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: ownerUser.id,
       },
     });
@@ -206,7 +245,7 @@ describe("Milestone 4: QR Codes with Scan Tracking", () => {
     const link = await db.link.create({
       data: {
         code: `qr-rules-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: ownerUser.id,
         clickLimit: 2,
         clicksCount: 2,

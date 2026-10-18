@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth/guard";
 import { db } from "@/lib/db";
 import { Role } from "@prisma/client";
-import { getQrTargetUrl, generateQrPng, generateQrSvg } from "@/lib/services/qr.service";
+import { getQrTargetUrl, generateQrPng, generateQrSvg, normalizeQrSize } from "@/lib/services/qr.service";
 
 export async function GET(
   request: NextRequest,
@@ -33,11 +33,13 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams;
     const format = searchParams.get("format") === "svg" ? "svg" : "png";
     const isDownload = searchParams.get("download") === "true";
+    const rawSize = searchParams.get("size") || searchParams.get("width");
+    const size = normalizeQrSize(rawSize);
 
     const targetUrl = getQrTargetUrl(link.code);
 
     if (format === "svg") {
-      const svgString = await generateQrSvg(targetUrl);
+      const svgString = await generateQrSvg(targetUrl, size);
       const headers = new Headers({
         "Content-Type": "image/svg+xml",
         "Cache-Control": "private, max-age=3600",
@@ -51,10 +53,11 @@ export async function GET(
     }
 
     // Default to PNG
-    const pngBuffer = await generateQrPng(targetUrl);
+    const pngBuffer = await generateQrPng(targetUrl, size);
     const headers = new Headers({
       "Content-Type": "image/png",
       "Cache-Control": "private, max-age=3600",
+      "X-Content-Type-Options": "nosniff",
     });
     if (isDownload) {
       headers.set("Content-Disposition", `attachment; filename="${link.code}-qr.png"`);

@@ -133,9 +133,9 @@ describe("Milestone 4: CSV Bulk Import", () => {
     // Row 4: invalid alias (line 4)
     const csv =
       "destination_url,alias,title\n" +
-      "https://example.com/good,valid-alias,Valid Link\n" +
+      "https://pulse-safe-test-target.org/good,valid-alias,Valid Link\n" +
       "not-a-valid-url,bad-url-alias,Invalid URL\n" +
-      "https://example.com/alias-too-short,ab,Short Alias";
+      "https://pulse-safe-test-target.org/alias-too-short,ab,Short Alias";
 
     const preview = await previewCsvImport(csv, testUserId);
     expect(preview.totalRows).toBe(3);
@@ -157,8 +157,8 @@ describe("Milestone 4: CSV Bulk Import", () => {
   it("detects duplicate aliases within the CSV file", async () => {
     const csv =
       "destination_url,alias,title\n" +
-      "https://example.com/first,duplicate-alias,First\n" +
-      "https://example.com/second,duplicate-alias,Second";
+      "https://pulse-safe-test-target.org/first,duplicate-alias,First\n" +
+      "https://pulse-safe-test-target.org/second,duplicate-alias,Second";
 
     const preview = await previewCsvImport(csv, testUserId);
     expect(preview.rows[0].isValid).toBe(true);
@@ -170,7 +170,7 @@ describe("Milestone 4: CSV Bulk Import", () => {
     const existing = await db.link.create({
       data: {
         code: `db-dup-${Date.now()}`,
-        destinationUrl: "https://example.com/existing",
+        destinationUrl: "https://pulse-safe-test-target.org/existing",
         userId: otherUserId,
       },
     });
@@ -178,7 +178,7 @@ describe("Milestone 4: CSV Bulk Import", () => {
 
     const csv =
       "destination_url,alias,title\n" +
-      `https://example.com/new,${existing.code},Trying taken alias`;
+      `https://pulse-safe-test-target.org/new,${existing.code},Trying taken alias`;
 
     const preview = await previewCsvImport(csv, testUserId);
     expect(preview.rows[0].isValid).toBe(false);
@@ -229,9 +229,9 @@ describe("Milestone 4: CSV Bulk Import", () => {
     const ts = Date.now();
     const csv =
       "destination_url,alias,title\n" +
-      `https://example.com/page1,valid-import-1-${ts},=CMD('calc')\n` +
+      `https://pulse-safe-test-target.org/page1,valid-import-1-${ts},=CMD('calc')\n` +
       `not-a-valid-url,bad-row-1-${ts},Skipped Bad URL\n` +
-      `https://example.com/page2,valid-import-2-${ts},Normal Title`;
+      `https://pulse-safe-test-target.org/page2,valid-import-2-${ts},Normal Title`;
 
     const summary = await executeCsvImport(csv, testUserId);
     expect(summary.totalRows).toBe(3);
@@ -273,7 +273,7 @@ describe("Milestone 4: CSV Bulk Import", () => {
     const csvContent =
       "destination_url,alias,title\n" +
       `https://${blocked.domain}/payload,fake-alias-${ts},Client Claimed Valid\n` +
-      `https://example.com/safe,server-valid-${ts},Safe Link`;
+      `https://pulse-safe-test-target.org/safe,server-valid-${ts},Safe Link`;
 
     // Malicious or crafted client request attempting to inject pre-validated rows
     const req = new NextRequest("http://localhost:3000/api/links/import/execute", {
@@ -311,5 +311,110 @@ describe("Milestone 4: CSV Bulk Import", () => {
       where: { code: `fake-alias-${ts}` },
     });
     expect(unallowedLink).toBeNull();
+  });
+
+  it("applies optional batch campaignId and tagIds to all imported links", async () => {
+    const ts = Date.now();
+    const campaign = await db.campaign.create({
+      data: {
+        name: `Import Campaign ${ts}`,
+        userId: testUserId,
+      },
+    });
+
+    const tag = await db.tag.create({
+      data: {
+        name: `batch-tag-${ts}`,
+        userId: testUserId,
+      },
+    });
+
+    const csvContent =
+      "destination_url,alias,title\n" +
+      `https://batch-import-test.org/link1,batch-link1-${ts},Batch Link 1\n` +
+      `https://batch-import-test.org/link2,batch-link2-${ts},Batch Link 2`;
+
+    const summary = await executeCsvImport(csvContent, testUserId, {
+      campaignId: campaign.id,
+      tagIds: [tag.id],
+    });
+
+    expect(summary.totalRows).toBe(2);
+    expect(summary.createdCount).toBe(2);
+    expect(summary.skippedCount).toBe(0);
+
+    for (const item of summary.created) {
+      createdLinkIds.push(item.id);
+      const linkInDb = await db.link.findUnique({
+        where: { id: item.id },
+        include: { tags: true },
+      });
+      expect(linkInDb?.campaignId).toBe(campaign.id);
+      expect(linkInDb?.tags).toHaveLength(1);
+      expect(linkInDb?.tags[0].tagId).toBe(tag.id);
+    }
+
+    await db.campaign.delete({ where: { id: campaign.id } });
+    await db.tag.delete({ where: { id: tag.id } });
+  });
+
+  it("rejects CSV bulk import when campaignId or tagId belongs to another user", async () => {
+    const ts = Date.now();
+    const otherUser = await db.user.create({
+      data: {
+        email: `foreign-user-${ts}@pulse-auth-test.io`,
+        passwordHash: "fakehash",
+      },
+    });
+
+    const foreignCampaign = await db.campaign.create({
+      data: {
+        name: `Foreign Campaign ${ts}`,
+        userId: otherUser.id,
+      },
+    });
+
+    const foreignTag = await db.tag.create({
+      data: {
+        name: `foreign-tag-${ts}`,
+        userId: otherUser.id,
+      },
+    });
+
+    const csvContent =
+      "destination_url,alias,title\n" +
+      `https://pulse-safe-test-target.org/auth1-${ts},auth1-alias-${ts},Auth Test Link`;
+
+    // 1. Foreign campaignId must be rejected with 404
+    await expect(
+      executeCsvImport(csvContent, testUserId, {
+        campaignId: foreignCampaign.id,
+      })
+    ).rejects.toThrow(/Campaign does not exist or access denied/i);
+
+    // 2. Foreign tagId must be rejected with 404
+    await expect(
+      executeCsvImport(csvContent, testUserId, {
+        tagIds: [foreignTag.id],
+      })
+    ).rejects.toThrow(/One or more tags do not exist or access denied/i);
+
+    // 3. Via POST /api/links/import/execute endpoint: returns 404 status
+    mockUser = { userId: testUserId, email: testUserEmail, role: Role.USER };
+    const req = new NextRequest("http://localhost:3000/api/links/import/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        csvContent,
+        campaignId: foreignCampaign.id,
+      }),
+    });
+    const res = await executeImportHandler(req);
+    expect(res.status).toBe(404);
+
+    // Cleanup foreign user, campaign, tag
+    await db.campaign.delete({ where: { id: foreignCampaign.id } });
+    await db.tag.delete({ where: { id: foreignTag.id } });
+    await db.user.delete({ where: { id: otherUser.id } });
   });
 });

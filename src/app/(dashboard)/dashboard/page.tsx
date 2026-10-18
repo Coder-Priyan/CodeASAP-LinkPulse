@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LinkCreateForm } from "@/components/LinkCreateForm";
 import { LinksTable, LinkItem } from "@/components/LinksTable";
+import { LoadingScreen, clearLoadingStarted } from "@/components/LoadingScreen";
 import {
   Link2,
   MousePointerClick,
@@ -17,6 +18,7 @@ import {
   X,
   BarChart3,
   Upload,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -46,56 +48,94 @@ export default function DashboardPage() {
   const [tags, setTags] = useState<TagOption[]>([]);
   const [filterCampaignId, setFilterCampaignId] = useState<string>("");
   const [filterTagId, setFilterTagId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  const fetchUserData = useCallback(async () => {
-    try {
-      const meRes = await fetch("/api/auth/me");
-      const meData = await meRes.json();
-
-      if (!meData.user) {
-        router.push("/login");
-        return;
-      }
-
-      setUser(meData.user);
-
-      // Fetch user campaigns & tags for filter dropdowns
-      const [campRes, tagRes] = await Promise.all([
-        fetch("/api/campaigns"),
-        fetch("/api/tags"),
-      ]);
-      const [campData, tagData] = await Promise.all([
-        campRes.json(),
-        tagRes.json(),
-      ]);
-      setCampaigns(campData.campaigns || []);
-      setTags(tagData.tags || []);
-
-      // Fetch filtered user links
-      const params = new URLSearchParams();
-      if (filterCampaignId) params.set("campaignId", filterCampaignId);
-      if (filterTagId) params.set("tagId", filterTagId);
-
-      const linksRes = await fetch(`/api/links?${params.toString()}`);
-      const linksData = await linksRes.json();
-      setLinks(linksData.links || []);
-    } catch (err) {
-      console.error("Dashboard fetch error:", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router, filterCampaignId, filterTagId]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchUserData();
+    document.title = "Dashboard | LinkPulse";
+  }, []);
+
+  const fetchUserData = useCallback(
+    async (isInitial = false) => {
+      const startTime = Date.now();
+      try {
+        setFetchError(null);
+        const params = new URLSearchParams();
+        if (filterCampaignId) params.set("campaignId", filterCampaignId);
+        if (filterTagId) params.set("tagId", filterTagId);
+
+        if (!isInitial && user) {
+          // Fast path for filter updates: only fetch filtered links
+          const linksRes = await fetch(`/api/links?${params.toString()}`);
+          if (!linksRes.ok) throw new Error("Failed to load links.");
+          const linksData = await linksRes.json();
+          setLinks(linksData.links || []);
+          return;
+        }
+
+        // Fetch user profile, campaigns, tags, and links concurrently in a single parallel network round
+        const [meRes, campRes, tagRes, linksRes] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/campaigns"),
+          fetch("/api/tags"),
+          fetch(`/api/links?${params.toString()}`),
+        ]);
+
+        if (meRes.status === 401) {
+          router.push("/login");
+          return;
+        }
+
+        if (!meRes.ok || !campRes.ok || !tagRes.ok || !linksRes.ok) {
+          throw new Error("One or more dashboard requests failed.");
+        }
+
+        const [meData, campData, tagData, linksData] = await Promise.all([
+          meRes.json(),
+          campRes.json(),
+          tagRes.json(),
+          linksRes.json(),
+        ]);
+
+        if (!meData.user) {
+          router.push("/login");
+          return;
+        }
+
+        // Smooth anti-flash minimum display time for initial load (320ms)
+        if (isInitial) {
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 320) {
+            await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+          }
+        }
+
+        setUser(meData.user);
+        setCampaigns(campData.campaigns || []);
+        setTags(tagData.tags || []);
+        setLinks(linksData.links || []);
+        clearLoadingStarted("dashboard");
+        setInitialLoading(false);
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+        if (isInitial) {
+          setFetchError("Unable to load your dashboard links. Please check your network and retry.");
+        }
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [router, filterCampaignId, filterTagId, user]
+  );
+
+  useEffect(() => {
+    fetchUserData(true);
   }, [fetchUserData]);
 
   const handleManualRefresh = () => {
     setRefreshing(true);
-    fetchUserData();
+    fetchUserData(false);
   };
 
   const clearFilters = () => {
@@ -103,13 +143,45 @@ export default function DashboardPage() {
     setFilterTagId("");
   };
 
-  if (loading) {
+  const handleLinkCreated = (newLink?: LinkItem) => {
+    if (newLink) {
+      setLinks((prev) => [newLink, ...prev.filter((l) => l.id !== newLink.id)]);
+    } else {
+      fetchUserData(false);
+    }
+  };
+
+  const handleOptimisticLinkCreated = (tempLink: LinkItem) => {
+    setLinks((prev) => [tempLink, ...prev]);
+  };
+
+  const handleLinkReconciled = (tempId: string, realLink: LinkItem) => {
+    setLinks((prev) => prev.map((l) => (l.id === tempId ? realLink : l)));
+  };
+
+  const handleLinkRollback = (tempId: string) => {
+    setLinks((prev) => prev.filter((l) => l.id !== tempId));
+  };
+
+  const handleCampaignCreated = (newCamp: { id: string; name: string }) => {
+    setCampaigns((prev) => [newCamp, ...prev.filter((c) => c.id !== newCamp.id)]);
+  };
+
+  const handleTagCreated = (newTag: { id: string; name: string; color: string | null }) => {
+    setTags((prev) => [newTag, ...prev.filter((t) => t.id !== newTag.id)]);
+  };
+
+  if (initialLoading) {
     return (
-      <div className="container" style={{ paddingTop: "5rem", textAlign: "center" }}>
-        <div style={{ color: "var(--text-secondary)", fontSize: "1.1rem" }}>
-          Loading your LinkPulse dashboard...
-        </div>
-      </div>
+      <LoadingScreen
+        pageName="dashboard"
+        error={fetchError}
+        onRetry={() => {
+          setFetchError(null);
+          setInitialLoading(true);
+          fetchUserData(true);
+        }}
+      />
     );
   }
 
@@ -120,35 +192,36 @@ export default function DashboardPage() {
   const attentionLinks = links.filter((l) => l.state !== "active").length;
 
   return (
-    <div className="container" style={{ paddingTop: "2.5rem", paddingBottom: "4rem" }}>
+    <div className="container-wide" style={{ paddingTop: "2.5rem", paddingBottom: "4rem" }}>
       {/* Header */}
       <div className="flex items-center justify-between" style={{ marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
         <div>
-          <h1 style={{ fontSize: "1.85rem", fontWeight: 800, letterSpacing: "-0.02em" }}>
-            Workspace Dashboard
+          <h1 style={{ fontSize: "2.25rem", letterSpacing: "0.01em" }}>
+            Dashboard
           </h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.925rem", marginTop: "0.25rem" }}>
-            Manage shortened links, custom aliases, redirect rules, and bot-filtered analytics.
+          <p style={{ color: "var(--color-muted)", fontSize: "0.975rem", marginTop: "0.25rem", fontWeight: 600 }}>
+            Manage shortened links, custom aliases, redirect rules, and clean analytics.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link href="/import" className="btn btn-secondary btn-sm flex items-center gap-2">
-            <Upload size={15} color="var(--accent-primary)" />
+        <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
+          <Link href="/import" prefetch={true} className="btn btn-secondary btn-sm flex items-center gap-2">
+            <Upload size={16} />
             <span>Bulk Import (CSV)</span>
           </Link>
 
-          <Link href="/analytics" className="btn btn-secondary btn-sm flex items-center gap-2">
-            <BarChart3 size={15} color="var(--accent-secondary)" />
-            <span>Open Analytics Dashboard</span>
+          <Link href="/analytics" prefetch={true} className="btn btn-secondary btn-sm flex items-center gap-2">
+            <BarChart3 size={16} />
+            <span>Analytics</span>
           </Link>
 
           <button
+            type="button"
             onClick={handleManualRefresh}
             className="btn btn-secondary btn-sm flex items-center gap-2"
             disabled={refreshing}
           >
-            <RefreshCw size={14} className={refreshing ? "spin" : ""} />
+            <RefreshCw size={15} className={refreshing ? "spin" : ""} />
             <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
           </button>
         </div>
@@ -157,73 +230,83 @@ export default function DashboardPage() {
       {/* Admin Notice Banner if Admin */}
       {user?.role === "ADMIN" && (
         <div
-          className="card"
+          className="card card-yellow"
           style={{
-            marginBottom: "1.5rem",
-            background: "rgba(168, 85, 247, 0.08)",
-            borderColor: "rgba(168, 85, 247, 0.25)",
-            padding: "1rem 1.25rem",
+            marginBottom: "1.75rem",
+            padding: "1.25rem 1.5rem",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: "0.75rem",
+            gap: "1rem",
           }}
         >
           <div className="flex items-center gap-3">
-            <ShieldAlert size={20} color="#c084fc" />
+            <div className="icon-chip icon-chip-paper">
+              <ShieldAlert size={18} strokeWidth={2.5} />
+            </div>
             <div>
-              <strong style={{ color: "#e9d5ff", fontSize: "0.95rem" }}>Administrator Access</strong>
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+              <strong style={{ fontSize: "1rem" }}>Administrator Account</strong>
+              <p style={{ color: "var(--color-ink)", fontSize: "0.9rem", marginTop: "0.15rem" }}>
                 You have system administrator permissions. Switch to the Admin Console to view all user links.
               </p>
             </div>
           </div>
-          <Link href="/admin" className="btn btn-secondary btn-sm" style={{ borderColor: "#c084fc" }}>
-            Open Admin Console &rarr;
+          <Link href="/admin" className="btn btn-secondary btn-sm">
+            <span>Admin Console &rarr;</span>
           </Link>
         </div>
       )}
 
       {/* Metrics Row */}
       <div className="stats-grid">
-        <div className="stat-card">
+        <div className="stat-card stat-card-teal">
           <div className="flex items-center justify-between">
             <span className="stat-title">My Links</span>
-            <Link2 size={18} color="var(--accent-primary)" />
+            <div className="icon-chip icon-chip-blue">
+              <Link2 size={16} strokeWidth={2.5} />
+            </div>
           </div>
           <div className="stat-value">{totalLinks}</div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card stat-card-butter">
           <div className="flex items-center justify-between">
             <span className="stat-title">Total Visits</span>
-            <MousePointerClick size={18} color="var(--accent-secondary)" />
+            <div className="icon-chip icon-chip-paper">
+              <MousePointerClick size={16} strokeWidth={2.5} />
+            </div>
           </div>
-          <div className="stat-value">{totalClicks}</div>
+          <div className="stat-value">{totalClicks.toLocaleString()}</div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card stat-card-sage">
           <div className="flex items-center justify-between">
             <span className="stat-title">Unique Visitors</span>
-            <Users size={18} color="#a78bfa" />
+            <div className="icon-chip icon-chip-yellow">
+              <Users size={16} strokeWidth={2.5} />
+            </div>
           </div>
-          <div className="stat-value">{totalUniqueVisitors}</div>
+          <div className="stat-value">{totalUniqueVisitors.toLocaleString()}</div>
         </div>
 
-        <div className="stat-card">
+        <div className={`stat-card ${attentionLinks > 0 ? "stat-card-coral" : "stat-card-sage"}`}>
           <div className="flex items-center justify-between">
-            <span className="stat-title">Active vs Restricted</span>
+            <span className="stat-title">Active Status</span>
             {attentionLinks > 0 ? (
-              <AlertTriangle size={18} color="var(--warning)" />
+              <div className="icon-chip icon-chip-coral">
+                <AlertTriangle size={16} strokeWidth={2.5} />
+              </div>
             ) : (
-              <CheckCircle size={18} color="var(--success)" />
+              <div className="icon-chip icon-chip-green">
+                <CheckCircle size={16} strokeWidth={2.5} />
+              </div>
             )}
           </div>
-          <div className="stat-value" style={{ fontSize: "1.5rem", marginTop: "0.6rem" }}>
-            <span style={{ color: "var(--success)" }}>{activeLinks} Active</span>
+          <div className="stat-value" style={{ fontSize: "1.65rem", marginTop: "0.5rem" }}>
+            <span>{activeLinks} Active</span>
             {attentionLinks > 0 && (
-              <span style={{ fontSize: "0.95rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>
+              <span style={{ fontSize: "0.95rem", color: "var(--color-muted)", marginLeft: "0.5rem", fontFamily: "var(--font-sans-family)", fontWeight: 700 }}>
                 ({attentionLinks} off/limited)
               </span>
             )}
@@ -232,25 +315,36 @@ export default function DashboardPage() {
       </div>
 
       {/* Two-Step Shorten Form */}
-      <LinkCreateForm onSuccess={fetchUserData} />
+      <LinkCreateForm
+        onSuccess={handleLinkCreated}
+        onOptimisticCreate={handleOptimisticLinkCreated}
+        onReconcile={handleLinkReconciled}
+        onRollback={handleLinkRollback}
+        campaigns={campaigns}
+        tags={tags}
+        onCampaignCreated={handleCampaignCreated}
+        onTagCreated={handleTagCreated}
+      />
+
 
       {/* Links List with Filters */}
-      <div style={{ marginTop: "2rem" }}>
+      <div style={{ marginTop: "1rem" }}>
         <div
           className="flex items-center justify-between"
-          style={{ marginBottom: "1rem", flexWrap: "wrap", gap: "1rem" }}
+          style={{ marginBottom: "1.25rem", flexWrap: "wrap", gap: "1rem" }}
         >
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700 }}>My Shortened Links</h2>
+          <h2 style={{ fontSize: "1.5rem" }}>My Shortened Links</h2>
 
           {/* Filter Bar: Campaigns & Tags */}
           <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
             <div className="flex items-center gap-1">
-              <Layers size={14} color="var(--text-muted)" />
+              <Layers size={16} />
               <select
                 value={filterCampaignId}
                 onChange={(e) => setFilterCampaignId(e.target.value)}
                 className="form-input"
-                style={{ width: "auto", padding: "0.35rem 0.65rem", fontSize: "0.825rem" }}
+                style={{ width: "auto", minHeight: "44px", padding: "0.4rem 0.85rem", fontSize: "0.9rem" }}
+                aria-label="Filter by Campaign"
               >
                 <option value="">All Campaigns</option>
                 {campaigns.map((c) => (
@@ -262,12 +356,13 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-1">
-              <TagIcon size={14} color="var(--text-muted)" />
+              <TagIcon size={16} />
               <select
                 value={filterTagId}
                 onChange={(e) => setFilterTagId(e.target.value)}
                 className="form-input"
-                style={{ width: "auto", padding: "0.35rem 0.65rem", fontSize: "0.825rem" }}
+                style={{ width: "auto", minHeight: "44px", padding: "0.4rem 0.85rem", fontSize: "0.9rem" }}
+                aria-label="Filter by Tag"
               >
                 <option value="">All Tags</option>
                 {tags.map((t) => (
@@ -280,12 +375,12 @@ export default function DashboardPage() {
 
             {(filterCampaignId || filterTagId) && (
               <button
+                type="button"
                 onClick={clearFilters}
                 className="btn btn-secondary btn-sm flex items-center gap-1"
-                style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}
                 title="Clear filters"
               >
-                <X size={13} />
+                <X size={15} />
                 <span>Clear</span>
               </button>
             )}

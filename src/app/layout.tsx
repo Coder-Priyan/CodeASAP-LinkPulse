@@ -1,12 +1,40 @@
 import type { Metadata } from "next";
+import { Lilita_One, Nunito, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 
+const fontDisplay = Lilita_One({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const fontSans = Nunito({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const fontMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "LinkPulse — Production URL Shortener & Analytics",
+  title: {
+    default: "LinkPulse — Short links, clear numbers",
+    template: "%s | LinkPulse",
+  },
   description:
-    "Fast, reliable URL shortener with real-time analytics, automated bot detection, and multi-tenant role-based access control.",
+    "A friendly, rule-driven URL shortener with clear analytics, QR codes, and privacy-safe visitor tracking.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -15,18 +43,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans)" }}>
+    <html lang="en" className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}>
+      <body>
         <Navbar />
-        <main style={{ minHeight: "calc(100vh - 180px)" }}>{children}</main>
+        <main id="main-content" style={{ minHeight: "calc(100vh - 160px)" }}>
+          {children}
+        </main>
         <Footer />
       </body>
     </html>

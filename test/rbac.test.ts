@@ -85,7 +85,7 @@ describe("6. Role-Based Access Control (RBAC) & Multi-Tenant Isolation", () => {
   it("prevents User 2 from viewing or accessing User 1's links, campaigns, tags, and analytics", async () => {
     // 1. User 1 creates resources
     const link1 = await createLink({
-      destinationUrl: "https://example.com/u1-target",
+      destinationUrl: "https://pulse-safe-test-target.org/u1-target",
       customAlias: `u1-link-${Date.now()}`,
       userId: user1.id,
     });
@@ -134,7 +134,7 @@ describe("6. Role-Based Access Control (RBAC) & Multi-Tenant Isolation", () => {
 
   it("allows Admin to disable any link; disabled link immediately stops redirecting and retains click history", async () => {
     const link = await createLink({
-      destinationUrl: "https://example.com/target-to-disable",
+      destinationUrl: "https://pulse-safe-test-target.org/target-to-disable",
       customAlias: `disable-test-${Date.now()}`,
       userId: user1.id,
     });
@@ -160,7 +160,7 @@ describe("6. Role-Based Access Control (RBAC) & Multi-Tenant Isolation", () => {
     expect(updated.disabledReason).toBe("Flagged for policy violation");
 
     // Disabled link rule evaluation
-    const evalResult = await evaluateLinkRules(updated);
+    const evalResult = await evaluateLinkRules({ ...updated, passwordHash: null });
     expect(evalResult.status).toBe("DISABLED");
     expect(evalResult.reason).toBe("Flagged for policy violation");
 

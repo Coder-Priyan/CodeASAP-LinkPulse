@@ -10,8 +10,8 @@ A URL shortener with analytics. Shorten a URL, set rules on it — expiry date, 
 
 **Links**
 - Create a short link with an auto-generated 6-character alphanumeric code or a custom alias (3–32 chars)
-- Optional title; destination URL and alias validated at creation and edit time
-- Server-side QR code generation (view and download in PNG and SVG formats) with encoded `?src=qr` source marker
+- Optional title (trimmed, max 255 chars, empty-to-null); destination URL and alias validated at creation and edit time
+- Server-side QR code generation (view and download in PNG and SVG formats) with encoded `?src=qr` source marker and customizable size (`?size=120..2048`, default 360, with safe fallback on invalid/NaN values)
 - Admins can disable any link; owners can toggle their own
 
 **Redirect rules** (evaluated in centralized order on every visit in `evaluateLinkRules`)
@@ -34,7 +34,7 @@ A URL shortener with analytics. Shorten a URL, set rules on it — expiry date, 
 - Dedicated bulk upload page (`/import`) linked from the dashboard; supports up to 200 links and 1 MB per file
 - Downloadable CSV template (`destination_url,alias,title`)
 - **Step 1: Preview & Validation**: row-by-row parsing with RFC-4180 compliance (UTF-8 BOM, CRLF, quoted commas, escaped quotes); checks URL format, alias validity, duplicate aliases in file, duplicate aliases in database, and blocked domains; displays line numbers with status pills and errors
-- **Step 2: Execution**: imports valid rows into the authenticated user's account and skips invalid rows with clear error summaries
+- **Step 2: Execution**: imports valid rows into the authenticated user's account and skips invalid rows with clear error summaries; supports optional batch assignment of `campaignId` and `tagIds` with strict multi-tenant ownership validation (rejects foreign IDs with 403 Forbidden)
 - **Formula injection defense**: any text cell beginning with `=`, `+`, `-`, or `@` is automatically neutralized by prefixing with an apostrophe (`'`) to prevent spreadsheet command execution
 - **Rate limiting**: isolated bulk import rate limit (10 imports per hour per user); bypasses the single-link 15/min limiter
 
@@ -324,12 +324,12 @@ Runs against the database configured in `.env`. Each test creates its own record
 7. **Rate limiting** — link creation (15/minute) and password attempts (5 failures/15 minutes)
 8. **Live analytics aggregation** — metrics, unique visitors, source split, and campaign performance match known test data
 9. **Campaign deletion cascade safety** — deleting a campaign decouples the campaign but preserves links and click history
-10. **Link PATCH updates** — campaign and tag assignments, ownership checks, preserving omitted fields, and explicit clearing
-11. **QR code generation & scan tracking** — PNG buffer and SVG string rendering, `?src=qr` tracking, allowlist normalization, rule immunity, bot exclusion, and RBAC endpoint protection (403 for non-owners)
-12. **CSV bulk import** — RFC-4180 parsing (BOM, CRLF, quoted commas, escaped quotes), formula injection neutralization (`=`, `+`, `-`, `@`), file size and row limits, line numbers, duplicate alias detection, and valid-row execution
+10. **Link PATCH updates & title editing** — campaign and tag assignments, title updates (trimming, max-length 255, empty-to-null), ownership checks (403 for non-owners), preserving omitted fields, and explicit clearing
+11. **QR code generation & scan tracking** — PNG buffer and SVG string rendering, custom size/width parameter with robust fallback for NaN/empty/non-numeric values and clamping (120–2048), `?src=qr` encoding verification, allowlist normalization, rule immunity, bot exclusion, and RBAC endpoint protection (403 for non-owners)
+12. **CSV bulk import** — RFC-4180 parsing (BOM, CRLF, quoted commas, escaped quotes), formula injection neutralization (`=`, `+`, `-`, `@`), file size and row limits, line numbers, duplicate alias detection, batch campaign/tag assignment, and foreign ID rejection
 13. **Admin domain blocklist** — domain normalization, hierarchical subdomain matching, enforcement on creation, editing, importing, and redirect-time status page, and admin-only endpoint protection (403 for normal users)
 
-Verified result: **14 test files, 66 tests, all passed** (17.7 s).
+Verified result: **14 test files, 80 tests, all passed**.
 
 ---
 
@@ -343,13 +343,13 @@ All routes require a valid session cookie (set at login) except register, login,
 | `POST` | `/api/auth/login` | Anyone | Log in, receive session cookie |
 | `POST` | `/api/auth/logout` | Authenticated | Clear session cookie |
 | `GET` | `/api/auth/me` | Authenticated | Return current session user |
-| `GET` | `/api/links` | Authenticated | List own links; query params: `campaignId`, `tagId`; ADMIN + `scope=all` returns all links |
-| `POST` | `/api/links` | Authenticated | Create a link (rate-limited: 15/min per user) |
-| `PATCH` | `/api/links/[id]` | Owner or ADMIN | Update rules, destination URL, active state, password, campaign, tags |
+| `GET` | `/api/links` | Authenticated | List own links; query params: `campaignId`, `tagId`, `limit`, `offset`; ADMIN + `scope=all` returns all links (supports optional backward-compatible pagination) |
+| `POST` | `/api/links` | Authenticated | Create a link with optional title, alias, rules, campaign, tags (rate-limited: 15/min per user) |
+| `PATCH` | `/api/links/[id]` | Owner or ADMIN | Update title, destination URL, rules, active state, password, campaign, tags (enforces ownership) |
 | `DELETE` | `/api/links/[id]` | Owner or ADMIN | Delete a link |
-| `GET` | `/api/links/[id]/qr` | Owner or ADMIN | Generate server-side QR code image (`?format=png` or `?format=svg`, `?download=true`) |
+| `GET` | `/api/links/[id]/qr` | Owner or ADMIN | Generate server-side QR code image (`?format=png` or `?format=svg`, `?size=120..2048`, `?download=true`) |
 | `POST` | `/api/links/import/preview` | Authenticated | Parse and validate CSV bulk import payload; returns row statuses and errors |
-| `POST` | `/api/links/import/execute` | Authenticated | Create links from valid CSV rows (rate-limited: 10 bulk imports/hour per user) |
+| `POST` | `/api/links/import/execute` | Authenticated | Create links from valid CSV rows; supports optional batch `campaignId` and `tagIds` with ownership validation (rate-limited: 10 bulk imports/hour per user) |
 | `POST` | `/api/links/verify` | Anyone | Verify passcode for password-protected link; preserves `?src=qr` |
 | `GET` | `/api/campaigns` | Authenticated | List own campaigns |
 | `POST` | `/api/campaigns` | Authenticated | Create a campaign |
@@ -363,6 +363,54 @@ All routes require a valid session cookie (set at login) except register, login,
 | `GET` | `/api/analytics` | Authenticated | Analytics report; query params: `period` (7d/30d/all), `campaignId`, `scope` (me/all) |
 
 The redirect route is handled by `GET /[code]` (a Next.js route handler, not under `/api`).
+
+### High-throughput redirect architecture & domain cache
+
+LinkPulse evaluates rules on every redirect (`GET /[code]`): link active status, destination domain safety, expiry timestamps, click limits, and passcodes.
+
+To prevent connection saturation and remote database round-trips under high-traffic spikes:
+- **In-Memory Cache**: Blocked domains are loaded once and cached in-memory with a short default TTL of 5 seconds (`DEFAULT_BLOCKED_DOMAIN_CACHE_TTL_MS = 5000`).
+- **In-Process Invalidation**: Administrative mutations (`POST` / `DELETE` on `/api/admin/blocked-domains`) immediately clear the local instance cache via `invalidateBlockedDomainCache()`.
+- **Multi-Instance / Serverless Tradeoff**: In horizontally scaled or serverless deployments (e.g. AWS Lambda, Vercel, multi-pod Kubernetes), instances that did not handle the admin write converge within the 5-second TTL window. During this bounded 5-second staleness window, a newly added blocked domain may still allow redirects on other instances before their local TTL expires. This tradeoff prioritizes redirect path throughput and prevents database connection pool exhaustion while bounding propagation delay to 5 seconds.
+- **Test Isolation**: In test environments (`NODE_ENV === "test"` or `process.env.VITEST`), the TTL defaults to 0 to guarantee that test fixtures created in the database are reflected instantaneously without artificial sleep delays. Tests can inject custom clocks and TTL overrides via `setClockForTesting` and `setCacheTtlForTesting`.
+
+---
+
+## Interaction Responsiveness & Benchmarking Scripts
+
+To evaluate perceived speed, interaction latencies, and loading transitions, LinkPulse includes production-grade Playwright measurement and screenshot scripts. Note: `playwright` was added as a `devDependency` in `package.json`.
+
+All scripts are completely credential-free: they read configuration from environment variables or dynamically resolve test admin users from the local database fallback, guaranteeing no hardcoded passwords, tokens, or secrets.
+
+### Available Scripts
+
+1. **Unthrottled Interaction Responsiveness Benchmark**:
+   ```bash
+   # Run 10 iterations measuring visual change latency and total completion time
+   BASE_URL="http://localhost:3001" RUNS=10 npx tsx scripts/measure_baseline_interactions.ts
+   ```
+2. **Throttled Network Interaction Benchmark (100ms RTT / Slow 4G)**:
+   ```bash
+   # Emulates 100ms RTT, 1.5 Mbps download, 750 kbps upload
+   BASE_URL="http://localhost:3001" RUNS=10 npx tsx scripts/measure_throttled.ts
+   ```
+3. **1280px Pending State Screenshots**:
+   ```bash
+   # Captures pending button/page states for Dashboard, Analytics, and Admin under 100ms throttling
+   BASE_URL="http://localhost:3001" npx tsx scripts/capture_responsiveness_screenshots.ts
+   ```
+4. **Database Cleanliness Verification**:
+   ```bash
+   # Verifies zero leftover test domains, test links, or test users in the database
+   npx tsx scripts/verify_db_cleanliness.ts
+   ```
+
+### Environment Variables for Scripts
+
+- `BASE_URL`: Target server URL (default: `http://localhost:3001`). Must point to a production build (`npm run build && npx next start -p 3001`).
+- `ADMIN_USER_ID` & `ADMIN_EMAIL`: Optional overrides for admin credentials. If unset, scripts query `db.user.findFirst({ where: { role: 'ADMIN' } })`.
+- `RUNS`: Number of measurement iterations (default: `10`).
+- `ARTIFACT_DIR`: Output directory for screenshots.
 
 ---
 

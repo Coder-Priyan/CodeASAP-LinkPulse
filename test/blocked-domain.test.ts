@@ -7,6 +7,10 @@ import {
   getCandidateDomains,
   isDomainBlocked,
   addBlockedDomain,
+  setClockForTesting,
+  setCacheTtlForTesting,
+  invalidateBlockedDomainCache,
+  BlockedDomainError,
 } from "@/lib/services/blocked-domain.service";
 import { createLink, updateLinkRules, evaluateLinkRules } from "@/lib/services/link.service";
 import { previewCsvImport } from "@/lib/services/csv-import.service";
@@ -76,15 +80,29 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
   });
 
   afterAll(async () => {
-    if (createdLinkIds.length > 0) {
-      await db.clickEvent.deleteMany({ where: { linkId: { in: createdLinkIds } } });
-      await db.link.deleteMany({ where: { id: { in: createdLinkIds } } });
+    for (const linkId of createdLinkIds) {
+      try {
+        await db.clickEvent.deleteMany({ where: { linkId } });
+        await db.linkTag.deleteMany({ where: { linkId } });
+        await db.passwordAttempt.deleteMany({ where: { linkId } });
+        await db.link.delete({ where: { id: linkId } });
+      } catch {
+        // Record might already be deleted
+      }
     }
-    if (createdBlockedDomainIds.length > 0) {
-      await db.blockedDomain.deleteMany({ where: { id: { in: createdBlockedDomainIds } } });
+    for (const id of createdBlockedDomainIds) {
+      try {
+        await db.blockedDomain.delete({ where: { id } });
+      } catch {
+        // Record might already be deleted
+      }
     }
-    if (createdUserIds.length > 0) {
-      await db.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    for (const userId of createdUserIds) {
+      try {
+        await db.user.delete({ where: { id: userId } });
+      } catch {
+        // Record might already be deleted
+      }
     }
   });
 
@@ -106,33 +124,35 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
   });
 
   it("matches subdomains when root domain is blocked, but does not overblock unrelated domains", async () => {
-    const blocked = await addBlockedDomain("evil-site.com", adminUser.id, "Malicious domain");
+    const testDomain = `evil-site-${Date.now()}.com`;
+    const blocked = await addBlockedDomain(testDomain, adminUser.id, "Malicious domain");
     createdBlockedDomainIds.push(blocked.id);
 
     // Exact match
-    const exact = await isDomainBlocked("https://evil-site.com/path");
+    const exact = await isDomainBlocked(`https://${testDomain}/path`);
     expect(exact.isBlocked).toBe(true);
     expect(exact.reason).toBe("Malicious domain");
 
     // Subdomain match
-    const sub = await isDomainBlocked("https://login.sub.evil-site.com/fake");
+    const sub = await isDomainBlocked(`https://login.sub.${testDomain}/fake`);
     expect(sub.isBlocked).toBe(true);
 
     // Unrelated domain sharing suffix should NOT be blocked
-    const notBlocked = await isDomainBlocked("https://notevil-site.com");
+    const notBlocked = await isDomainBlocked(`https://not${testDomain}`);
     expect(notBlocked.isBlocked).toBe(false);
 
-    const safeHost = await isDomainBlocked("https://evil-site.com.legit.org");
+    const safeHost = await isDomainBlocked(`https://${testDomain}.legit.org`);
     expect(safeHost.isBlocked).toBe(false);
   });
 
   it("enforces blocklist when creating a link", async () => {
-    const blocked = await addBlockedDomain("blocked-create.com", adminUser.id);
+    const testDomain = `blocked-create-${Date.now()}.com`;
+    const blocked = await addBlockedDomain(testDomain, adminUser.id);
     createdBlockedDomainIds.push(blocked.id);
 
     await expect(
       createLink({
-        destinationUrl: "https://blocked-create.com/login",
+        destinationUrl: `https://${testDomain}/login`,
         userId: normalUser.id,
       })
     ).rejects.toThrow(/Destination domain is blocked/);
@@ -145,13 +165,14 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
     });
     createdLinkIds.push(link.id);
 
-    const blocked = await addBlockedDomain("blocked-edit.com", adminUser.id);
+    const testDomain = `blocked-edit-${Date.now()}.com`;
+    const blocked = await addBlockedDomain(testDomain, adminUser.id);
     createdBlockedDomainIds.push(blocked.id);
 
     // Attempting to change destinationUrl to a blocked domain must fail
     await expect(
       updateLinkRules(link.id, normalUser.id, Role.USER, {
-        destinationUrl: "https://sub.blocked-edit.com/hacked",
+        destinationUrl: `https://sub.${testDomain}/hacked`,
       })
     ).rejects.toThrow(/Destination domain is blocked/);
   });
@@ -238,6 +259,28 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
   });
 
   it("enforces RBAC on blocklist endpoints: normal users get 403, admin has full access", async () => {
+    // 0. Unauthenticated (logged-out) visitor -> 401 on GET, POST, DELETE
+    mockUser = null;
+    const anonGetReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains");
+    const anonGetRes = await getDomainsHandler(anonGetReq);
+    expect(anonGetRes.status).toBe(401);
+
+    const anonPostReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: "anon-blocked.com" }),
+    });
+    const anonPostRes = await postDomainHandler(anonPostReq);
+    expect(anonPostRes.status).toBe(401);
+
+    const anonDeleteReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains/some-id", {
+      method: "DELETE",
+    });
+    const anonDeleteRes = await deleteDomainHandler(anonDeleteReq, {
+      params: Promise.resolve({ id: "some-id" }),
+    });
+    expect(anonDeleteRes.status).toBe(401);
+
     // 1. Normal user GET /api/admin/blocked-domains -> 403
     mockUser = { userId: normalUser.id, email: normalUser.email, role: Role.USER };
     const userGetReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains");
@@ -499,5 +542,77 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
 
     const count = await db.blockedDomain.count({ where: { domain: "github.com" } });
     expect(count).toBe(1);
+  });
+
+  it("exercises the real blocked-domain cache path with TTL bypass OFF using an injectable clock", async () => {
+    // 1. Configure deterministic clock and 5000ms TTL
+    let currentTime = 1_000_000;
+    setClockForTesting(() => currentTime);
+    setCacheTtlForTesting(5000);
+    invalidateBlockedDomainCache();
+
+    const uniqueDomain = `cache-test-${Date.now()}.net`;
+    const targetUrl = `https://${uniqueDomain}/path`;
+
+    try {
+      // Step A: Domain not in DB -> loads cache at t=1,000,000, returns not blocked
+      const res1 = await isDomainBlocked(targetUrl);
+      expect(res1.isBlocked).toBe(false);
+
+      // Step B: Insert domain directly into DB (bypassing in-process cache, simulating an external multi-instance write)
+      const inserted = await db.blockedDomain.create({
+        data: {
+          domain: uniqueDomain,
+          reason: "Direct DB insertion simulation",
+          createdById: adminUser.id,
+        },
+      });
+      createdBlockedDomainIds.push(inserted.id);
+
+      // Step C: Advance clock by 2,000ms (t = 1,002,000 < t_fetch + 5,000)
+      currentTime += 2000;
+
+      // Because TTL has not expired, check MUST hit cached map and return false
+      const resCached = await isDomainBlocked(targetUrl);
+      expect(resCached.isBlocked).toBe(false);
+
+      // Step D: Advance clock past 5,000ms TTL (t = 1,006,000 > t_fetch + 5,000)
+      currentTime += 4000;
+
+      // Cache has expired, must query DB and return blocked with reason
+      const resRefreshed = await isDomainBlocked(targetUrl);
+      expect(resRefreshed.isBlocked).toBe(true);
+      expect(resRefreshed.matchedDomain).toBe(uniqueDomain);
+      expect(resRefreshed.reason).toBe("Direct DB insertion simulation");
+
+      // Step E: Test immediate in-process invalidation
+      invalidateBlockedDomainCache();
+      const resPostInvalidation = await isDomainBlocked(targetUrl);
+      expect(resPostInvalidation.isBlocked).toBe(true);
+    } finally {
+      // Reset clock and TTL back to test environment defaults
+      setClockForTesting(null);
+      setCacheTtlForTesting(null);
+      invalidateBlockedDomainCache();
+    }
+  });
+
+  it("catches Prisma P2002 unique constraint and throws BlockedDomainError with DUPLICATE_DOMAIN (409)", async () => {
+    const dupDomain = `dup-block-${Date.now()}.com`;
+    const first = await addBlockedDomain(dupDomain, adminUser.id, "First insertion");
+    createdBlockedDomainIds.push(first.id);
+
+    await expect(
+      addBlockedDomain(dupDomain, adminUser.id, "Duplicate attempt")
+    ).rejects.toThrowError(BlockedDomainError);
+
+    try {
+      await addBlockedDomain(dupDomain, adminUser.id, "Duplicate attempt");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(BlockedDomainError);
+      expect(err.code).toBe("DUPLICATE_DOMAIN");
+      expect(err.status).toBe(409);
+      expect(err.message).toBe("This domain is already in the blocklist.");
+    }
   });
 });

@@ -17,11 +17,20 @@ import {
   Layers,
   Tag as TagIcon,
   Plus,
+  RefreshCw,
 } from "lucide-react";
 import { buildShortUrl } from "@/lib/utils/short-url";
+import { LinkItem } from "./LinksTable";
 
 interface LinkCreateFormProps {
-  onSuccess: () => void;
+  onSuccess: (newLink?: LinkItem) => void;
+  onOptimisticCreate?: (tempLink: LinkItem) => void;
+  onReconcile?: (tempId: string, realLink: LinkItem) => void;
+  onRollback?: (tempId: string) => void;
+  campaigns?: CampaignOption[];
+  tags?: TagOption[];
+  onCampaignCreated?: (campaign: CampaignOption) => void;
+  onTagCreated?: (tag: TagOption) => void;
 }
 
 interface CampaignOption {
@@ -66,10 +75,20 @@ const RESERVED_SLUGS = new Set([
   "link-status",
 ]);
 
-export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
+export function LinkCreateForm({
+  onSuccess,
+  onOptimisticCreate,
+  onReconcile,
+  onRollback,
+  campaigns: propCampaigns,
+  tags: propTags,
+  onCampaignCreated,
+  onTagCreated,
+}: LinkCreateFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
 
   // Step 1 fields
+  const [title, setTitle] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
   const [customAlias, setCustomAlias] = useState("");
 
@@ -81,8 +100,8 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   // Inline creation for campaigns and tags
-  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
-  const [tags, setTags] = useState<TagOption[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>(propCampaigns || []);
+  const [tags, setTags] = useState<TagOption[]>(propTags || []);
   const [newCampaignName, setNewCampaignName] = useState("");
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const [newTagName, setNewTagName] = useState("");
@@ -97,18 +116,35 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Load user campaigns & tags
+  // Sync prop changes into local state
   useEffect(() => {
-    fetch("/api/campaigns")
-      .then((res) => res.json())
-      .then((data) => setCampaigns(data.campaigns || []))
-      .catch(() => {});
+    if (propCampaigns && propCampaigns.length > 0) {
+      setCampaigns(propCampaigns);
+    }
+  }, [propCampaigns]);
 
-    fetch("/api/tags")
-      .then((res) => res.json())
-      .then((data) => setTags(data.tags || []))
-      .catch(() => {});
-  }, []);
+  useEffect(() => {
+    if (propTags && propTags.length > 0) {
+      setTags(propTags);
+    }
+  }, [propTags]);
+
+  // Load user campaigns & tags only if not provided via props
+  useEffect(() => {
+    if (!propCampaigns || propCampaigns.length === 0) {
+      fetch("/api/campaigns")
+        .then((res) => res.json())
+        .then((data) => setCampaigns(data.campaigns || []))
+        .catch(() => {});
+    }
+
+    if (!propTags || propTags.length === 0) {
+      fetch("/api/tags")
+        .then((res) => res.json())
+        .then((data) => setTags(data.tags || []))
+        .catch(() => {});
+    }
+  }, [propCampaigns, propTags]);
 
   const handleCreateCampaignInline = async () => {
     if (!newCampaignName.trim()) return;
@@ -124,6 +160,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         setCampaignId(data.campaign.id);
         setNewCampaignName("");
         setShowNewCampaign(false);
+        onCampaignCreated?.(data.campaign);
       } else {
         alert(data.error || "Failed to create campaign.");
       }
@@ -146,6 +183,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         setSelectedTagIds((prev) => [...prev, data.tag.id]);
         setNewTagName("");
         setShowNewTag(false);
+        onTagCreated?.(data.tag);
       } else {
         alert(data.error || "Failed to create tag.");
       }
@@ -241,6 +279,30 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
       return;
     }
 
+    const tempId = `temp-${Date.now()}`;
+    const pendingAlias = customAlias.trim() || `pulse-${Math.random().toString(36).substring(2, 8)}`;
+    const optimisticItem: LinkItem = {
+      id: tempId,
+      code: pendingAlias,
+      destinationUrl: destinationUrl.trim(),
+      title: title.trim() || null,
+      isActive: true,
+      state: "active",
+      disabledReason: null,
+      expiresAt: expiresAt || null,
+      clickLimit: clickLimit ? parseInt(clickLimit, 10) : null,
+      clicksCount: 0,
+      qrScansCount: 0,
+      uniqueVisitorsCount: 0,
+      createdAt: new Date().toISOString(),
+      campaign: campaigns.find((c) => c.id === campaignId) || null,
+      tags: tags.filter((t) => selectedTagIds.includes(t.id)),
+      hasPassword: Boolean(password && password.trim().length > 0),
+    };
+
+    // 1. Optimistic immediate display in table
+    onOptimisticCreate?.(optimisticItem);
+
     setLoading(true);
 
     try {
@@ -248,6 +310,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title: title.trim() || undefined,
           destinationUrl: destinationUrl.trim(),
           customAlias: customAlias.trim() || undefined,
           expiresAt: expiresAt || null,
@@ -271,7 +334,34 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         shortUrl,
       });
 
-      // Reset form
+      const createdItem: LinkItem = {
+        id: data.link.id,
+        code: data.link.code,
+        destinationUrl: data.link.destinationUrl,
+        title: data.link.title || null,
+        isActive: data.link.isActive,
+        state: data.link.isActive ? "active" : "disabled",
+        disabledReason: data.link.disabledReason || null,
+        expiresAt: data.link.expiresAt || null,
+        clickLimit: data.link.clickLimit || null,
+        clicksCount: 0,
+        qrScansCount: 0,
+        uniqueVisitorsCount: 0,
+        createdAt: data.link.createdAt || new Date().toISOString(),
+        campaign: campaigns.find((c) => c.id === campaignId) || null,
+        tags: tags.filter((t) => selectedTagIds.includes(t.id)),
+        hasPassword: Boolean(password && password.trim().length > 0),
+      };
+
+      // 2. Reconcile temporary row with verified server response
+      if (onReconcile) {
+        onReconcile(tempId, createdItem);
+      } else {
+        onSuccess(createdItem);
+      }
+
+      // 3. Reset form only on successful creation
+      setTitle("");
       setDestinationUrl("");
       setCustomAlias("");
       setExpiresAt("");
@@ -280,8 +370,11 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
       setCampaignId("");
       setSelectedTagIds([]);
       setStep(1);
-      onSuccess();
     } catch (err: unknown) {
+      // 4. Rollback: remove optimistic temporary row
+      onRollback?.(tempId);
+
+      // Keep user input completely intact in form fields!
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -302,52 +395,40 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
   return (
     <div className="card" style={{ marginBottom: "2rem" }}>
       {/* Header and Step Indicators */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Sparkles size={20} color="var(--accent-secondary)" />
+      <div style={{ marginBottom: "1.75rem" }}>
+        <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem", marginBottom: "0.5rem" }}>
+          <h2 style={{ fontSize: "1.35rem", display: "flex", alignItems: "center", gap: "0.6rem", fontFamily: "var(--font-display)" }}>
+            <span className="icon-chip icon-chip-blue">
+              <Sparkles size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
+            </span>
             <span>Create Short Link</span>
           </h2>
 
-          <div className="flex items-center gap-2" style={{ fontSize: "0.85rem" }}>
-            <span
-              style={{
-                padding: "0.2rem 0.6rem",
-                borderRadius: "var(--radius-sm)",
-                background: step === 1 ? "var(--accent-primary)" : "rgba(255, 255, 255, 0.08)",
-                color: "#fff",
-                fontWeight: 600,
-              }}
-            >
-              1. Destination & Alias
-            </span>
-            <span style={{ color: "var(--text-muted)" }}>&rarr;</span>
-            <span
-              style={{
-                padding: "0.2rem 0.6rem",
-                borderRadius: "var(--radius-sm)",
-                background: step === 2 ? "var(--accent-primary)" : "rgba(255, 255, 255, 0.08)",
-                color: step === 2 ? "#fff" : "var(--text-muted)",
-                fontWeight: 600,
-              }}
-            >
-              2. Rules, Campaign & Tags
-            </span>
+          <div className="stepper" style={{ margin: 0 }}>
+            <div className={`step-item ${step === 1 ? "active" : "completed"}`}>
+              <span className="step-circle">{step === 2 ? "✓" : "1"}</span>
+              <span>1. Destination & Alias</span>
+            </div>
+            <div className="step-line" />
+            <div className={`step-item ${step === 2 ? "active" : ""}`}>
+              <span className="step-circle">2</span>
+              <span>2. Rules & Tags</span>
+            </div>
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="alert alert-error">
-          <AlertCircle size={18} style={{ flexShrink: 0 }} />
+        <div className="alert alert-error" role="alert">
+          <AlertCircle size={20} style={{ flexShrink: 0 }} />
           <span>{error}</span>
         </div>
       )}
 
       {createdLink && (
-        <div className="alert alert-success" style={{ flexDirection: "column", alignItems: "flex-start", gap: "0.75rem" }}>
-          <div className="flex items-center gap-2" style={{ fontWeight: 600 }}>
-            <Check size={18} />
+        <div className="alert alert-success" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.85rem", padding: "1.25rem", marginBottom: "1.5rem" }}>
+          <div className="flex items-center gap-2" style={{ fontWeight: 800, fontSize: "1.05rem" }}>
+            <Check size={20} strokeWidth={2.5} />
             <span>Short link created successfully!</span>
           </div>
 
@@ -355,32 +436,36 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
             className="flex items-center justify-between"
             style={{
               width: "100%",
-              backgroundColor: "rgba(0, 0, 0, 0.2)",
-              padding: "0.5rem 0.75rem",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "0.95rem",
+              backgroundColor: "var(--color-paper)",
+              border: "var(--border-thick)",
+              padding: "0.75rem 1rem",
+              borderRadius: "var(--radius-md)",
+              boxShadow: "var(--shadow-hard-sm)",
+              flexWrap: "wrap",
+              gap: "0.75rem",
             }}
           >
-            <span style={{ fontFamily: "monospace", color: "#6ee7b7" }}>{createdLink.shortUrl}</span>
+            <span style={{ fontFamily: "var(--font-mono-family)", fontWeight: 700, fontSize: "1.05rem", color: "var(--color-ink)", wordBreak: "break-all" }}>
+              {createdLink.shortUrl}
+            </span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleCopy}
                 className="btn btn-secondary btn-sm"
-                style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
+                aria-label="Copy short link"
               >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-                <span>{copied ? "Copied" : "Copy"}</span>
+                {copied ? <Check size={14} strokeWidth={2.5} /> : <Copy size={14} />}
+                <span>{copied ? "Copied!" : "Copy URL"}</span>
               </button>
               <a
                 href={createdLink.shortUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-primary btn-sm"
-                style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
               >
                 <span>Visit</span>
-                <ArrowRight size={12} />
+                <ArrowRight size={14} />
               </a>
             </div>
           </div>
@@ -390,16 +475,32 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
       {/* STEP 1: Destination URL & Alias */}
       {step === 1 && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "1rem", alignItems: "flex-start" }}>
-            <div className="form-group" style={{ marginBottom: "0.75rem" }}>
+          <div className="create-link-grid-step1">
+            <div className="form-group" style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
+              <label className="form-label" htmlFor="linkTitle">
+                Link Title <span style={{ fontWeight: 400, color: "var(--color-muted)" }}>(Optional)</span>
+              </label>
+              <input
+                id="linkTitle"
+                type="text"
+                className="form-input"
+                placeholder="e.g. Marketing Campaign Landing Page"
+                value={title}
+                maxLength={255}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <span className="form-hint">A clear label for tables and reports (max 255 chars)</span>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="destUrl">
-                Destination URL <span style={{ color: "var(--accent-primary)" }}>*</span>
+                Destination URL <span style={{ color: "var(--color-text-danger)" }}>*</span>
               </label>
               <input
                 id="destUrl"
                 type="text"
                 className="form-input"
-                placeholder="https://example.com/long-page-path"
+                placeholder="https://example.com/your-long-path"
                 value={destinationUrl}
                 onChange={(e) => setDestinationUrl(e.target.value)}
                 autoFocus
@@ -407,61 +508,79 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
               {urlValidation && (
                 <div
                   style={{
-                    fontSize: "0.8rem",
-                    marginTop: "0.3rem",
-                    color: urlValidation.isValid ? "var(--success)" : "var(--danger)",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    marginTop: "0.35rem",
+                    color: urlValidation.isValid ? "var(--color-ink)" : "var(--color-text-danger)",
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.3rem",
+                    gap: "0.35rem",
                   }}
                 >
-                  {urlValidation.isValid ? <Check size={13} /> : <AlertCircle size={13} />}
+                  {urlValidation.isValid ? <Check size={14} strokeWidth={2.5} style={{ color: "var(--color-green)" }} /> : <AlertCircle size={14} />}
                   <span>{urlValidation.message}</span>
                 </div>
               )}
             </div>
 
-            <div className="form-group" style={{ marginBottom: "0.75rem" }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="customAlias">
-                Custom Alias (Optional)
+                Custom Alias <span style={{ fontWeight: 400, color: "var(--color-muted)" }}>(Optional)</span>
               </label>
               <input
                 id="customAlias"
                 type="text"
                 className="form-input"
-                placeholder="e.g. spring-sale-2026"
+                placeholder="e.g. launch-2026"
                 value={customAlias}
                 onChange={(e) => setCustomAlias(e.target.value)}
               />
               {aliasValidation ? (
                 <div
                   style={{
-                    fontSize: "0.8rem",
-                    marginTop: "0.3rem",
-                    color: aliasValidation.isValid ? "var(--success)" : "var(--danger)",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    marginTop: "0.35rem",
+                    color: aliasValidation.isValid ? "var(--color-ink)" : "var(--color-text-danger)",
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.3rem",
+                    gap: "0.35rem",
                   }}
                 >
-                  {aliasValidation.isValid ? <Check size={13} /> : <AlertCircle size={13} />}
+                  {aliasValidation.isValid ? <Check size={14} strokeWidth={2.5} style={{ color: "var(--color-green)" }} /> : <AlertCircle size={14} />}
                   <span>{aliasValidation.message}</span>
                 </div>
               ) : (
-                <span className="form-hint">Leave blank to auto-generate a random 6-character code</span>
+                <span className="form-hint">Leave blank to generate a random 6-character code</span>
               )}
+            </div>
+
+            {/* Short Link Preview across full card width with wrapping text */}
+            <div className="create-link-preview-chip">
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0, flex: 1, flexWrap: "wrap" }}>
+                <span style={{ color: "var(--color-muted)", fontSize: "0.825rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>
+                  Short Link Preview:
+                </span>
+                <span className="create-link-preview-chip-text">
+                  {buildShortUrl(customAlias.trim() || "random6")}
+                </span>
+              </div>
+              <span style={{ fontSize: "0.8rem", color: "var(--color-ink-muted)", fontWeight: 600, flexShrink: 0 }}>
+                {customAlias.trim() ? "Custom alias active" : "6-character random code will be generated"}
+              </span>
             </div>
           </div>
 
-          <div style={{ marginTop: "1rem", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
             <button
               type="button"
               className="btn btn-primary"
               onClick={handleNextStep}
               disabled={!destinationUrl.trim() || (urlValidation !== null && !urlValidation.isValid)}
+              title={!destinationUrl.trim() ? "Enter a destination URL to proceed" : "Continue to Rules & Tags"}
             >
-              <span>Configure Options & Review</span>
-              <ArrowRight size={16} />
+              <span>Next: Set Rules & Tags</span>
+              <ArrowRight size={18} strokeWidth={2.5} />
             </button>
           </div>
         </div>
@@ -470,49 +589,66 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
       {/* STEP 2: Rules, Campaign, Tags & Review */}
       {step === 2 && (
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: "1rem" }}>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>
-              Target: <strong style={{ color: "var(--text-primary)" }}>{destinationUrl}</strong>{" "}
+          <div style={{ marginBottom: "1.25rem" }}>
+            <div
+              style={{
+                padding: "0.75rem 1rem",
+                borderRadius: "var(--radius-md)",
+                backgroundColor: "var(--color-paper)",
+                border: "var(--border-thin)",
+                fontSize: "0.95rem",
+                color: "var(--color-ink)",
+              }}
+            >
+              Target: <strong style={{ wordBreak: "break-all" }}>{destinationUrl}</strong>{" "}
               {customAlias ? (
                 <>
-                  (as <code style={{ color: "var(--accent-secondary)" }}>/{customAlias}</code>)
+                  (alias: <code className="code-badge">/{customAlias}</code>)
                 </>
               ) : (
-                "(auto-generated short code)"
+                <span style={{ color: "var(--color-muted)" }}>(auto-generated code)</span>
               )}
-            </p>
+            </div>
           </div>
 
           {/* Section: Organization (Campaign & Tags) */}
           <div
             style={{
-              padding: "1rem",
+              padding: "1.25rem",
               borderRadius: "var(--radius-md)",
-              backgroundColor: "rgba(255, 255, 255, 0.02)",
-              border: "1px solid var(--border-color)",
-              marginBottom: "1.25rem",
+              backgroundColor: "var(--color-white)",
+              border: "var(--border-thick)",
+              boxShadow: "var(--shadow-hard-sm)",
+              marginBottom: "1.5rem",
             }}
           >
-            <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.75rem" }}>
+            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.85rem" }}>
               Link Organization
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.25rem" }}>
               {/* Campaign Picker */}
               <div>
-                <label className="form-label flex items-center justify-between" htmlFor="campSelect">
-                  <span className="flex items-center gap-1">
-                    <Layers size={13} />
+                <div className="flex items-center justify-between" style={{ marginBottom: "0.45rem" }}>
+                  <label className="form-label" htmlFor="campSelect" style={{ margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <Layers size={14} />
                     <span>Assign Campaign</span>
-                  </span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => setShowNewCampaign(!showNewCampaign)}
-                    style={{ background: "none", border: "none", color: "var(--accent-primary)", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline" }}
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      padding: "0.2rem 0.6rem",
+                      fontSize: "0.75rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                    }}
+                    aria-label={showNewCampaign ? "Cancel creating campaign" : "Create new campaign"}
                   >
                     {showNewCampaign ? "Cancel" : "+ New"}
                   </button>
-                </label>
+                </div>
 
                 {showNewCampaign ? (
                   <div className="flex gap-2" style={{ marginTop: "0.25rem" }}>
@@ -522,13 +658,14 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
                       placeholder="Campaign name"
                       value={newCampaignName}
                       onChange={(e) => setNewCampaignName(e.target.value)}
-                      style={{ fontSize: "0.85rem", padding: "0.4rem 0.6rem" }}
+                      style={{ fontSize: "0.9rem", minHeight: "44px" }}
+                      aria-label="New campaign name"
                     />
                     <button
                       type="button"
                       onClick={handleCreateCampaignInline}
                       className="btn btn-primary btn-sm"
-                      style={{ padding: "0.3rem 0.6rem" }}
+                      style={{ minHeight: "44px", padding: "0 1rem" }}
                     >
                       Save
                     </button>
@@ -539,7 +676,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
                     className="form-input"
                     value={campaignId}
                     onChange={(e) => setCampaignId(e.target.value)}
-                    style={{ fontSize: "0.85rem" }}
+                    style={{ fontSize: "0.9rem", minHeight: "44px" }}
                   >
                     <option value="">No Campaign (None)</option>
                     {campaigns.map((c) => (
@@ -553,19 +690,26 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
 
               {/* Tags Picker */}
               <div>
-                <label className="form-label flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <TagIcon size={13} />
+                <div className="flex items-center justify-between" style={{ marginBottom: "0.45rem" }}>
+                  <span className="form-label" style={{ margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <TagIcon size={14} />
                     <span>Assign Tags</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowNewTag(!showNewTag)}
-                    style={{ background: "none", border: "none", color: "var(--accent-primary)", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline" }}
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      padding: "0.2rem 0.6rem",
+                      fontSize: "0.75rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                    }}
+                    aria-label={showNewTag ? "Cancel creating tag" : "Create new tag"}
                   >
                     {showNewTag ? "Cancel" : "+ New"}
                   </button>
-                </label>
+                </div>
 
                 {showNewTag ? (
                   <div className="flex gap-2" style={{ marginTop: "0.25rem" }}>
@@ -575,19 +719,20 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
                       placeholder="Tag name"
                       value={newTagName}
                       onChange={(e) => setNewTagName(e.target.value)}
-                      style={{ fontSize: "0.85rem", padding: "0.4rem 0.6rem" }}
+                      style={{ fontSize: "0.9rem", minHeight: "44px" }}
+                      aria-label="New tag name"
                     />
                     <button
                       type="button"
                       onClick={handleCreateTagInline}
                       className="btn btn-primary btn-sm"
-                      style={{ padding: "0.3rem 0.6rem" }}
+                      style={{ minHeight: "44px", padding: "0 1rem" }}
                     >
                       Save
                     </button>
                   </div>
                 ) : (
-                  <div className="flex gap-1" style={{ flexWrap: "wrap", marginTop: "0.25rem" }}>
+                  <div className="flex gap-1" style={{ flexWrap: "wrap", marginTop: "0.35rem" }}>
                     {tags.length > 0 ? (
                       tags.map((t) => {
                         const isSelected = selectedTagIds.includes(t.id);
@@ -596,22 +741,14 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
                             type="button"
                             key={t.id}
                             onClick={() => toggleTag(t.id)}
-                            style={{
-                              padding: "0.25rem 0.6rem",
-                              borderRadius: "999px",
-                              fontSize: "0.75rem",
-                              cursor: "pointer",
-                              border: isSelected ? "1px solid var(--accent-secondary)" : "1px solid var(--border-color)",
-                              backgroundColor: isSelected ? "rgba(6, 182, 212, 0.2)" : "rgba(255, 255, 255, 0.04)",
-                              color: isSelected ? "#67e8f9" : "var(--text-secondary)",
-                            }}
+                            className={`tag-pill ${isSelected ? "selected" : ""}`}
                           >
-                            {isSelected ? `✓ ${t.name}` : t.name}
+                            {isSelected ? `✓ #${t.name}` : `#${t.name}`}
                           </button>
                         );
                       })
                     ) : (
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      <span style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>
                         No tags yet. Click &quot;+ New&quot; to add tags.
                       </span>
                     )}
@@ -626,7 +763,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
             {/* Expiry */}
             <div className="form-group">
               <label className="form-label flex items-center gap-2" htmlFor="expiryInput">
-                <Clock size={14} />
+                <Clock size={16} />
                 <span>Expiration Date</span>
               </label>
               <input
@@ -637,13 +774,13 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
                 onChange={(e) => setExpiresAt(e.target.value)}
                 disabled={loading}
               />
-              <span className="form-hint">Deactivates redirect after specified time</span>
+              <span className="form-hint">Deactivates redirect after specified date</span>
             </div>
 
             {/* Click Limit */}
             <div className="form-group">
               <label className="form-label flex items-center gap-2" htmlFor="limitInput">
-                <Gauge size={14} />
+                <Gauge size={16} />
                 <span>Click Limit</span>
               </label>
               <input
@@ -656,13 +793,13 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
                 onChange={(e) => setClickLimit(e.target.value)}
                 disabled={loading}
               />
-              <span className="form-hint">Atomic cap — bots will not consume this quota</span>
+              <span className="form-hint">Atomic cap &mdash; bot clicks are filtered</span>
             </div>
 
             {/* Password */}
             <div className="form-group">
               <label className="form-label flex items-center gap-2" htmlFor="passInput">
-                <Lock size={14} />
+                <Lock size={16} />
                 <span>Passcode</span>
               </label>
               <input
@@ -674,7 +811,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
               />
-              <span className="form-hint">Protected against brute-force guessing</span>
+              <span className="form-hint">Passcode protected challenge screen</span>
             </div>
           </div>
 
@@ -682,20 +819,21 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
           <div
             style={{
               marginTop: "1.25rem",
-              padding: "1rem",
+              padding: "1rem 1.25rem",
               borderRadius: "var(--radius-md)",
-              backgroundColor: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid var(--border-color)",
+              backgroundColor: "var(--color-paper)",
+              border: "var(--border-thick)",
+              boxShadow: "var(--shadow-hard-sm)",
             }}
           >
-            <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--text-secondary)" }}>
-              Rule Summary & Policy Review:
+            <div style={{ fontSize: "0.85rem", fontWeight: 800, marginBottom: "0.5rem", color: "var(--color-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Rule Summary
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "0.85rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", fontSize: "0.9rem", color: "var(--color-ink)" }}>
               {campaignId && (
-                <div className="flex items-center gap-2" style={{ color: "#38bdf8" }}>
-                  <Layers size={14} />
+                <div className="flex items-center gap-2">
+                  <Layers size={16} />
                   <span>
                     <strong>Campaign:</strong> Grouped under &quot;{campaigns.find((c) => c.id === campaignId)?.name}&quot;.
                   </span>
@@ -703,47 +841,47 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
               )}
 
               {selectedTagIds.length > 0 && (
-                <div className="flex items-center gap-2" style={{ color: "#a78bfa" }}>
-                  <TagIcon size={14} />
+                <div className="flex items-center gap-2">
+                  <TagIcon size={16} />
                   <span>
                     <strong>Tags ({selectedTagIds.length}):</strong>{" "}
-                    {tags.filter((t) => selectedTagIds.includes(t.id)).map((t) => t.name).join(", ")}
+                    {tags.filter((t) => selectedTagIds.includes(t.id)).map((t) => `#${t.name}`).join(", ")}
                   </span>
                 </div>
               )}
 
               {expiresAt && (
-                <div className="flex items-center gap-2" style={{ color: "#fcd34d" }}>
-                  <AlertTriangle size={14} />
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={16} style={{ color: "var(--color-coral)" }} />
                   <span>
-                    <strong>Expiry Rule Active:</strong> Redirect will automatically expire on{" "}
+                    <strong>Expiry Rule Active:</strong> Redirect will expire on{" "}
                     {new Date(expiresAt).toLocaleString()}.
                   </span>
                 </div>
               )}
 
               {clickLimit && parseInt(clickLimit, 10) > 0 && (
-                <div className="flex items-center gap-2" style={{ color: "#fcd34d" }}>
-                  <AlertTriangle size={14} />
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={16} style={{ color: "var(--color-coral)" }} />
                   <span>
-                    <strong>Click Limit Active:</strong> Redirect will atomically cut off after{" "}
+                    <strong>Click Limit Active:</strong> Redirect will cut off after{" "}
                     {parseInt(clickLimit, 10)} total visits.
                   </span>
                 </div>
               )}
 
               {password && password.trim().length > 0 && (
-                <div className="flex items-center gap-2" style={{ color: "#93c5fd" }}>
-                  <Lock size={14} />
+                <div className="flex items-center gap-2">
+                  <Lock size={16} />
                   <span>
-                    <strong>Password Protection:</strong> Visitors will see a challenge screen and must enter this passcode.
+                    <strong>Passcode Protection:</strong> Visitors must enter this passcode to access destination.
                   </span>
                 </div>
               )}
 
               {!expiresAt && !clickLimit && !password && !campaignId && selectedTagIds.length === 0 && (
-                <div className="flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
-                  <Info size={14} />
+                <div className="flex items-center gap-2" style={{ color: "var(--color-muted)" }}>
+                  <Info size={16} />
                   <span>Standard open link: No expiration date, unlimited visits, no passcode required.</span>
                 </div>
               )}
@@ -751,7 +889,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-between" style={{ marginTop: "1.5rem" }}>
+          <div className="flex items-center justify-between" style={{ marginTop: "1.75rem", flexWrap: "wrap", gap: "1rem" }}>
             <button
               type="button"
               className="btn btn-secondary"
@@ -764,15 +902,19 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
 
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-primary flex items-center justify-center gap-2"
               disabled={loading}
-              style={{ minWidth: "160px" }}
+              aria-busy={loading}
+              style={{ minWidth: "180px" }}
             >
               {loading ? (
-                <span>Publishing Link...</span>
+                <>
+                  <RefreshCw size={18} className="spin" />
+                  <span>Publishing Link...</span>
+                </>
               ) : (
                 <>
-                  <Link2 size={16} />
+                  <Link2 size={18} strokeWidth={2.5} />
                   <span>Publish Short Link</span>
                 </>
               )}

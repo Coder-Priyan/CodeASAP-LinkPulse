@@ -67,7 +67,7 @@ describe("3. Bot Exclusion & Click Limit Protection", () => {
     const link = await db.link.create({
       data: {
         code: `test-bot-rec-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: testUserId,
       },
     });
@@ -89,7 +89,7 @@ describe("3. Bot Exclusion & Click Limit Protection", () => {
     const link = await db.link.create({
       data: {
         code: `test-bot-redir-${Date.now()}`,
-        destinationUrl: "https://example.com/dest-bot",
+        destinationUrl: "https://pulse-safe-test-target.org/dest-bot",
         userId: testUserId,
         clickLimit: 3,
         clicksCount: 0,
@@ -105,7 +105,7 @@ describe("3. Bot Exclusion & Click Limit Protection", () => {
 
     // Should redirect to destination
     expect(botRes.status).toBe(307);
-    expect(botRes.headers.get("location")).toBe("https://example.com/dest-bot");
+    expect(botRes.headers.get("location")).toBe("https://pulse-safe-test-target.org/dest-bot");
 
     // DB click counter and events must be completely untouched
     const linkAfterBot = await db.link.findUnique({ where: { id: link.id } });
@@ -138,7 +138,7 @@ describe("3. Bot Exclusion & Click Limit Protection", () => {
     const link = await db.link.create({
       data: {
         code: `test-bot-pwd-${Date.now()}`,
-        destinationUrl: "https://example.com/dest-pwd",
+        destinationUrl: "https://pulse-safe-test-target.org/dest-pwd",
         userId: testUserId,
         clickLimit: 3,
         clicksCount: 0,
@@ -161,7 +161,7 @@ describe("3. Bot Exclusion & Click Limit Protection", () => {
     expect(botRes.status).toBe(200);
     const botData = await botRes.json();
     expect(botData.success).toBe(true);
-    expect(botData.destinationUrl).toBe("https://example.com/dest-pwd");
+    expect(botData.destinationUrl).toBe("https://pulse-safe-test-target.org/dest-pwd");
 
     // Click count must NOT increment
     const linkAfterBot = await db.link.findUnique({ where: { id: link.id } });

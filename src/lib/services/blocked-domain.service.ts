@@ -64,8 +64,62 @@ export function getCandidateDomains(hostname: string): string[] {
 }
 
 /**
+ * In-memory cache of blocked domains for high-throughput redirect checks.
+ * Bounded by a short 5-second TTL to ensure safe multi-instance and serverless convergence.
+ */
+let cachedDomainsMap: Map<string, string | null> | null = null;
+let lastCacheFetchTime = 0;
+let timeProvider: () => number = () => Date.now();
+let overrideTtlMs: number | null = null;
+
+export const DEFAULT_BLOCKED_DOMAIN_CACHE_TTL_MS = 5_000; // 5 seconds default
+
+export function setClockForTesting(fn?: (() => number) | null): void {
+  timeProvider = fn || (() => Date.now());
+}
+
+export function setCacheTtlForTesting(ttlMs?: number | null): void {
+  overrideTtlMs = ttlMs ?? null;
+}
+
+export function invalidateBlockedDomainCache(): void {
+  cachedDomainsMap = null;
+  lastCacheFetchTime = 0;
+}
+
+async function getOrLoadBlockedDomainsMap(): Promise<Map<string, string | null>> {
+  const effectiveTtl =
+    overrideTtlMs !== null
+      ? overrideTtlMs
+      : (process.env.NODE_ENV === "test" || process.env.VITEST ? 0 : DEFAULT_BLOCKED_DOMAIN_CACHE_TTL_MS);
+
+  const now = timeProvider();
+  if (effectiveTtl > 0 && cachedDomainsMap && now - lastCacheFetchTime < effectiveTtl) {
+    return cachedDomainsMap;
+  }
+
+  try {
+    const records = await db.blockedDomain.findMany({
+      select: { domain: true, reason: true },
+    });
+    const map = new Map<string, string | null>();
+    for (const r of records) {
+      map.set(r.domain, r.reason);
+    }
+    cachedDomainsMap = map;
+    lastCacheFetchTime = now;
+    return map;
+  } catch (err) {
+    if (cachedDomainsMap) {
+      return cachedDomainsMap;
+    }
+    throw err;
+  }
+}
+
+/**
  * Fast indexed check if a destination URL belongs to a blocked domain or subdomain.
- * Performs a single indexed query seeking matching parent domains.
+ * Uses in-memory cached domain map with automatic invalidation on add/remove.
  */
 export async function isDomainBlocked(
   destinationUrl: string
@@ -85,18 +139,15 @@ export async function isDomainBlocked(
       return { isBlocked: false };
     }
 
-    const match = await db.blockedDomain.findFirst({
-      where: {
-        domain: { in: candidateDomains },
-      },
-    });
-
-    if (match) {
-      return {
-        isBlocked: true,
-        matchedDomain: match.domain,
-        reason: match.reason || "This domain is restricted by platform policy.",
-      };
+    const domainMap = await getOrLoadBlockedDomainsMap();
+    for (const candidate of candidateDomains) {
+      if (domainMap.has(candidate)) {
+        return {
+          isBlocked: true,
+          matchedDomain: candidate,
+          reason: domainMap.get(candidate) || "This domain is restricted by platform policy.",
+        };
+      }
     }
 
     return { isBlocked: false };
@@ -123,17 +174,8 @@ export async function addBlockedDomain(
     throw new BlockedDomainError("Invalid domain format. Please enter a valid domain (e.g. evil.com).", "INVALID_DOMAIN", 400);
   }
 
-  // Check if already blocked
-  const existing = await db.blockedDomain.findUnique({
-    where: { domain: normalized },
-  });
-
-  if (existing) {
-    throw new BlockedDomainError("This domain is already in the blocklist.", "DUPLICATE_DOMAIN", 409);
-  }
-
   try {
-    return await db.blockedDomain.create({
+    const created = await db.blockedDomain.create({
       data: {
         domain: normalized,
         reason: reason?.trim() || null,
@@ -145,6 +187,8 @@ export async function addBlockedDomain(
         },
       },
     });
+    invalidateBlockedDomainCache();
+    return created;
   } catch (err: any) {
     if (err?.code === "P2002") {
       throw new BlockedDomainError("This domain is already in the blocklist.", "DUPLICATE_DOMAIN", 409);
@@ -168,6 +212,7 @@ export async function removeBlockedDomain(id: string) {
   await db.blockedDomain.delete({
     where: { id },
   });
+  invalidateBlockedDomainCache();
 
   return { success: true };
 }
