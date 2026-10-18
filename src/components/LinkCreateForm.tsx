@@ -17,11 +17,17 @@ import {
   Layers,
   Tag as TagIcon,
   Plus,
+  RefreshCw,
 } from "lucide-react";
 import { buildShortUrl } from "@/lib/utils/short-url";
+import { LinkItem } from "./LinksTable";
 
 interface LinkCreateFormProps {
-  onSuccess: () => void;
+  onSuccess: (newLink?: LinkItem) => void;
+  campaigns?: CampaignOption[];
+  tags?: TagOption[];
+  onCampaignCreated?: (campaign: CampaignOption) => void;
+  onTagCreated?: (tag: TagOption) => void;
 }
 
 interface CampaignOption {
@@ -66,7 +72,13 @@ const RESERVED_SLUGS = new Set([
   "link-status",
 ]);
 
-export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
+export function LinkCreateForm({
+  onSuccess,
+  campaigns: propCampaigns,
+  tags: propTags,
+  onCampaignCreated,
+  onTagCreated,
+}: LinkCreateFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
 
   // Step 1 fields
@@ -82,8 +94,8 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   // Inline creation for campaigns and tags
-  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
-  const [tags, setTags] = useState<TagOption[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>(propCampaigns || []);
+  const [tags, setTags] = useState<TagOption[]>(propTags || []);
   const [newCampaignName, setNewCampaignName] = useState("");
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const [newTagName, setNewTagName] = useState("");
@@ -98,18 +110,35 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Load user campaigns & tags
+  // Sync prop changes into local state
   useEffect(() => {
-    fetch("/api/campaigns")
-      .then((res) => res.json())
-      .then((data) => setCampaigns(data.campaigns || []))
-      .catch(() => {});
+    if (propCampaigns && propCampaigns.length > 0) {
+      setCampaigns(propCampaigns);
+    }
+  }, [propCampaigns]);
 
-    fetch("/api/tags")
-      .then((res) => res.json())
-      .then((data) => setTags(data.tags || []))
-      .catch(() => {});
-  }, []);
+  useEffect(() => {
+    if (propTags && propTags.length > 0) {
+      setTags(propTags);
+    }
+  }, [propTags]);
+
+  // Load user campaigns & tags only if not provided via props
+  useEffect(() => {
+    if (!propCampaigns || propCampaigns.length === 0) {
+      fetch("/api/campaigns")
+        .then((res) => res.json())
+        .then((data) => setCampaigns(data.campaigns || []))
+        .catch(() => {});
+    }
+
+    if (!propTags || propTags.length === 0) {
+      fetch("/api/tags")
+        .then((res) => res.json())
+        .then((data) => setTags(data.tags || []))
+        .catch(() => {});
+    }
+  }, [propCampaigns, propTags]);
 
   const handleCreateCampaignInline = async () => {
     if (!newCampaignName.trim()) return;
@@ -125,6 +154,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         setCampaignId(data.campaign.id);
         setNewCampaignName("");
         setShowNewCampaign(false);
+        onCampaignCreated?.(data.campaign);
       } else {
         alert(data.error || "Failed to create campaign.");
       }
@@ -147,6 +177,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         setSelectedTagIds((prev) => [...prev, data.tag.id]);
         setNewTagName("");
         setShowNewTag(false);
+        onTagCreated?.(data.tag);
       } else {
         alert(data.error || "Failed to create tag.");
       }
@@ -273,6 +304,25 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         shortUrl,
       });
 
+      const createdItem: LinkItem = {
+        id: data.link.id,
+        code: data.link.code,
+        destinationUrl: data.link.destinationUrl,
+        title: data.link.title || null,
+        isActive: data.link.isActive,
+        state: data.link.isActive ? "active" : "disabled",
+        disabledReason: data.link.disabledReason || null,
+        expiresAt: data.link.expiresAt || null,
+        clickLimit: data.link.clickLimit || null,
+        clicksCount: 0,
+        qrScansCount: 0,
+        uniqueVisitorsCount: 0,
+        createdAt: data.link.createdAt || new Date().toISOString(),
+        campaign: campaigns.find((c) => c.id === campaignId) || null,
+        tags: tags.filter((t) => selectedTagIds.includes(t.id)),
+        hasPassword: Boolean(password && password.trim().length > 0),
+      };
+
       // Reset form
       setTitle("");
       setDestinationUrl("");
@@ -283,7 +333,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
       setCampaignId("");
       setSelectedTagIds([]);
       setStep(1);
-      onSuccess();
+      onSuccess(createdItem);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -816,12 +866,16 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
 
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-primary flex items-center justify-center gap-2"
               disabled={loading}
+              aria-busy={loading}
               style={{ minWidth: "180px" }}
             >
               {loading ? (
-                <span>Publishing Link...</span>
+                <>
+                  <RefreshCw size={18} className="spin" />
+                  <span>Publishing Link...</span>
+                </>
               ) : (
                 <>
                   <Link2 size={18} strokeWidth={2.5} />

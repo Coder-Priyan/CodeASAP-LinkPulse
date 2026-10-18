@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LinkCreateForm } from "@/components/LinkCreateForm";
 import { LinksTable, LinkItem } from "@/components/LinksTable";
-import { LoadingScreen } from "@/components/LoadingScreen";
+import { LoadingScreen, clearLoadingStarted } from "@/components/LoadingScreen";
 import {
   Link2,
   MousePointerClick,
@@ -65,6 +65,15 @@ export default function DashboardPage() {
         if (filterCampaignId) params.set("campaignId", filterCampaignId);
         if (filterTagId) params.set("tagId", filterTagId);
 
+        if (!isInitial && user) {
+          // Fast path for filter updates: only fetch filtered links
+          const linksRes = await fetch(`/api/links?${params.toString()}`);
+          if (!linksRes.ok) throw new Error("Failed to load links.");
+          const linksData = await linksRes.json();
+          setLinks(linksData.links || []);
+          return;
+        }
+
         // Fetch user profile, campaigns, tags, and links concurrently in a single parallel network round
         const [meRes, campRes, tagRes, linksRes] = await Promise.all([
           fetch("/api/auth/me"),
@@ -106,6 +115,7 @@ export default function DashboardPage() {
         setCampaigns(campData.campaigns || []);
         setTags(tagData.tags || []);
         setLinks(linksData.links || []);
+        clearLoadingStarted("dashboard");
         setInitialLoading(false);
       } catch (err) {
         console.error("Dashboard fetch error:", err);
@@ -116,7 +126,7 @@ export default function DashboardPage() {
         setRefreshing(false);
       }
     },
-    [router, filterCampaignId, filterTagId]
+    [router, filterCampaignId, filterTagId, user]
   );
 
   useEffect(() => {
@@ -131,6 +141,22 @@ export default function DashboardPage() {
   const clearFilters = () => {
     setFilterCampaignId("");
     setFilterTagId("");
+  };
+
+  const handleLinkCreated = (newLink?: LinkItem) => {
+    if (newLink) {
+      setLinks((prev) => [newLink, ...prev.filter((l) => l.id !== newLink.id)]);
+    } else {
+      fetchUserData(false);
+    }
+  };
+
+  const handleCampaignCreated = (newCamp: { id: string; name: string }) => {
+    setCampaigns((prev) => [newCamp, ...prev.filter((c) => c.id !== newCamp.id)]);
+  };
+
+  const handleTagCreated = (newTag: { id: string; name: string; color: string | null }) => {
+    setTags((prev) => [newTag, ...prev.filter((t) => t.id !== newTag.id)]);
   };
 
   if (initialLoading) {
@@ -167,12 +193,12 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
-          <Link href="/import" className="btn btn-secondary btn-sm flex items-center gap-2">
+          <Link href="/import" prefetch={true} className="btn btn-secondary btn-sm flex items-center gap-2">
             <Upload size={16} />
             <span>Bulk Import (CSV)</span>
           </Link>
 
-          <Link href="/analytics" className="btn btn-secondary btn-sm flex items-center gap-2">
+          <Link href="/analytics" prefetch={true} className="btn btn-secondary btn-sm flex items-center gap-2">
             <BarChart3 size={16} />
             <span>Analytics</span>
           </Link>
@@ -277,7 +303,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Two-Step Shorten Form */}
-      <LinkCreateForm onSuccess={fetchUserData} />
+      <LinkCreateForm
+        onSuccess={handleLinkCreated}
+        campaigns={campaigns}
+        tags={tags}
+        onCampaignCreated={handleCampaignCreated}
+        onTagCreated={handleTagCreated}
+      />
 
       {/* Desktop Keyboard Pro-Tip */}
       {totalLinks > 0 && (

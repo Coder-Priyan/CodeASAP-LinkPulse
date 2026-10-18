@@ -174,15 +174,6 @@ export async function addBlockedDomain(
     throw new BlockedDomainError("Invalid domain format. Please enter a valid domain (e.g. evil.com).", "INVALID_DOMAIN", 400);
   }
 
-  // Check if already blocked
-  const existing = await db.blockedDomain.findUnique({
-    where: { domain: normalized },
-  });
-
-  if (existing) {
-    throw new BlockedDomainError("This domain is already in the blocklist.", "DUPLICATE_DOMAIN", 409);
-  }
-
   try {
     const created = await db.blockedDomain.create({
       data: {

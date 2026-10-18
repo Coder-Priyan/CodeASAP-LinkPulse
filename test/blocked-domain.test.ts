@@ -79,15 +79,29 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
   });
 
   afterAll(async () => {
-    if (createdLinkIds.length > 0) {
-      await db.clickEvent.deleteMany({ where: { linkId: { in: createdLinkIds } } });
-      await db.link.deleteMany({ where: { id: { in: createdLinkIds } } });
+    for (const linkId of createdLinkIds) {
+      try {
+        await db.clickEvent.deleteMany({ where: { linkId } });
+        await db.linkTag.deleteMany({ where: { linkId } });
+        await db.passwordAttempt.deleteMany({ where: { linkId } });
+        await db.link.delete({ where: { id: linkId } });
+      } catch {
+        // Record might already be deleted
+      }
     }
-    if (createdBlockedDomainIds.length > 0) {
-      await db.blockedDomain.deleteMany({ where: { id: { in: createdBlockedDomainIds } } });
+    for (const id of createdBlockedDomainIds) {
+      try {
+        await db.blockedDomain.delete({ where: { id } });
+      } catch {
+        // Record might already be deleted
+      }
     }
-    if (createdUserIds.length > 0) {
-      await db.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    for (const userId of createdUserIds) {
+      try {
+        await db.user.delete({ where: { id: userId } });
+      } catch {
+        // Record might already be deleted
+      }
     }
   });
 
@@ -109,33 +123,35 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
   });
 
   it("matches subdomains when root domain is blocked, but does not overblock unrelated domains", async () => {
-    const blocked = await addBlockedDomain("evil-site.com", adminUser.id, "Malicious domain");
+    const testDomain = `evil-site-${Date.now()}.com`;
+    const blocked = await addBlockedDomain(testDomain, adminUser.id, "Malicious domain");
     createdBlockedDomainIds.push(blocked.id);
 
     // Exact match
-    const exact = await isDomainBlocked("https://evil-site.com/path");
+    const exact = await isDomainBlocked(`https://${testDomain}/path`);
     expect(exact.isBlocked).toBe(true);
     expect(exact.reason).toBe("Malicious domain");
 
     // Subdomain match
-    const sub = await isDomainBlocked("https://login.sub.evil-site.com/fake");
+    const sub = await isDomainBlocked(`https://login.sub.${testDomain}/fake`);
     expect(sub.isBlocked).toBe(true);
 
     // Unrelated domain sharing suffix should NOT be blocked
-    const notBlocked = await isDomainBlocked("https://notevil-site.com");
+    const notBlocked = await isDomainBlocked(`https://not${testDomain}`);
     expect(notBlocked.isBlocked).toBe(false);
 
-    const safeHost = await isDomainBlocked("https://evil-site.com.legit.org");
+    const safeHost = await isDomainBlocked(`https://${testDomain}.legit.org`);
     expect(safeHost.isBlocked).toBe(false);
   });
 
   it("enforces blocklist when creating a link", async () => {
-    const blocked = await addBlockedDomain("blocked-create.com", adminUser.id);
+    const testDomain = `blocked-create-${Date.now()}.com`;
+    const blocked = await addBlockedDomain(testDomain, adminUser.id);
     createdBlockedDomainIds.push(blocked.id);
 
     await expect(
       createLink({
-        destinationUrl: "https://blocked-create.com/login",
+        destinationUrl: `https://${testDomain}/login`,
         userId: normalUser.id,
       })
     ).rejects.toThrow(/Destination domain is blocked/);
@@ -148,13 +164,14 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
     });
     createdLinkIds.push(link.id);
 
-    const blocked = await addBlockedDomain("blocked-edit.com", adminUser.id);
+    const testDomain = `blocked-edit-${Date.now()}.com`;
+    const blocked = await addBlockedDomain(testDomain, adminUser.id);
     createdBlockedDomainIds.push(blocked.id);
 
     // Attempting to change destinationUrl to a blocked domain must fail
     await expect(
       updateLinkRules(link.id, normalUser.id, Role.USER, {
-        destinationUrl: "https://sub.blocked-edit.com/hacked",
+        destinationUrl: `https://sub.${testDomain}/hacked`,
       })
     ).rejects.toThrow(/Destination domain is blocked/);
   });

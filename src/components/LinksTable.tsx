@@ -177,7 +177,6 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
         alert(data.error || "Failed to update link status");
       } else {
         showToast(`Route /${link.code} is now ${newStatus ? "active" : "disabled"}.`);
-        onRefresh();
       }
     } catch {
       // Rollback on network error
@@ -216,7 +215,6 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
         alert(data.error || "Failed to delete link.");
       } else {
         showToast("Link successfully deleted.");
-        onRefresh();
       }
     } catch {
       // Rollback on network error
@@ -978,7 +976,16 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
           link={editingLink}
           isOpen={true}
           onClose={() => setEditingLink(null)}
-          onSaved={onRefresh}
+          onSaved={(updatedLink) => {
+            if (updatedLink) {
+              setDisplayLinks((prev) =>
+                prev.map((l) => (l.id === updatedLink.id ? updatedLink : l))
+              );
+              showToast(`Link rules updated for /${updatedLink.code}.`);
+            } else {
+              onRefresh();
+            }
+          }}
         />
       )}
 

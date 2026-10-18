@@ -16,8 +16,12 @@ export async function GET(request: NextRequest) {
     const scope = searchParams.get("scope");
     const campaignId = searchParams.get("campaignId") || undefined;
     const tagId = searchParams.get("tagId") || undefined;
+    const limitParam = searchParams.get("limit");
+    const offsetParam = searchParams.get("offset");
+    const limit = limitParam ? Math.max(1, parseInt(limitParam, 10)) : undefined;
+    const offset = offsetParam ? Math.max(0, parseInt(offsetParam, 10)) : undefined;
 
-    const filters = { campaignId, tagId };
+    const filters = { campaignId, tagId, limit, offset };
 
     if (scope === "all" && user.role === Role.ADMIN) {
       const allLinks = await getAllLinksAdmin(filters);

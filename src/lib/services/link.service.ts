@@ -55,6 +55,8 @@ export interface UpdateLinkRulesInput {
 export interface LinkFilters {
   campaignId?: string;
   tagId?: string;
+  limit?: number;
+  offset?: number;
 }
 
 /**
@@ -245,12 +247,7 @@ export async function incrementClickCountAtomic(
 export async function createLink(input: CreateLinkInput): Promise<LinkWithStats> {
   const { title, destinationUrl, customAlias, userId, expiresAt, clickLimit, password, campaignId, tagIds, skipRateLimit } = input;
 
-  // 1. Enforce rate limiting per user (unless bypassed for bulk import)
-  if (!skipRateLimit) {
-    await checkLinkCreationRateLimit(userId);
-  }
-
-  // 2. Validate destination URL
+  // 1. Synchronous URL and Alias syntax validation
   const urlValidation = validateUrl(destinationUrl);
   if (!urlValidation.isValid || !urlValidation.normalizedUrl) {
     throw new LinkServiceError(
@@ -261,19 +258,7 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
   }
   const cleanUrl = urlValidation.normalizedUrl;
 
-  // 2b. Check against admin domain blocklist
-  const blockCheck = await isDomainBlocked(cleanUrl);
-  if (blockCheck.isBlocked) {
-    throw new LinkServiceError(
-      blockCheck.reason ? `Destination domain is blocked: ${blockCheck.reason}` : "Destination domain is blocked by platform policy.",
-      "BLOCKED_DOMAIN",
-      422
-    );
-  }
-
-  let finalCode = "";
-
-  // 3. Validate custom alias if provided
+  let sanitizedAlias: string | undefined;
   if (customAlias && customAlias.trim().length > 0) {
     const aliasValidation = validateCustomAlias(customAlias);
     if (!aliasValidation.isValid || !aliasValidation.sanitizedAlias) {
@@ -283,49 +268,10 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
         422
       );
     }
-    const sanitized = aliasValidation.sanitizedAlias;
-
-    // Check if alias is already taken
-    const existing = await db.link.findUnique({
-      where: { code: sanitized },
-      select: { id: true },
-    });
-
-    if (existing) {
-      throw new LinkServiceError(
-        `Alias "${sanitized}" is already in use. Please pick another one.`,
-        "DUPLICATE_ALIAS",
-        409
-      );
-    }
-
-    finalCode = sanitized;
-  } else {
-    // 4. Generate unique random short code with collision avoidance retry
-    let attempts = 0;
-    const maxAttempts = 5;
-    let uniqueFound = false;
-
-    while (attempts < maxAttempts && !uniqueFound) {
-      const candidate = generateShortCode(6);
-      const existing = await db.link.findUnique({
-        where: { code: candidate },
-        select: { id: true },
-      });
-
-      if (!existing) {
-        finalCode = candidate;
-        uniqueFound = true;
-      }
-      attempts++;
-    }
-
-    if (!uniqueFound) {
-      finalCode = generateShortCode(7);
-    }
+    sanitizedAlias = aliasValidation.sanitizedAlias;
   }
 
-  // 5. Parse rules: Expiry, Click Limit, Password
+  // 2. Synchronous validation for rules
   let parsedExpiry: Date | null = null;
   if (expiresAt) {
     parsedExpiry = new Date(expiresAt);
@@ -345,48 +291,70 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     }
   }
 
-  let passwordHash: string | null = null;
-  if (password && password.trim().length > 0) {
-    if (password.length < 4) {
-      throw new LinkServiceError("Link password must be at least 4 characters.", "INVALID_PASSWORD", 422);
-    }
-    passwordHash = await bcrypt.hash(password, 12);
+  if (password && password.trim().length > 0 && password.length < 4) {
+    throw new LinkServiceError("Link password must be at least 4 characters.", "INVALID_PASSWORD", 422);
   }
 
-  // 6. Sanitize and validate title if provided
   const cleanTitle = sanitizeLinkTitle(title);
+  const uniqueTagIds = tagIds && tagIds.length > 0 ? Array.from(new Set(tagIds)) : [];
 
-  // 7. Verify Campaign ownership if provided
-  let validCampaignId: string | null = null;
+  // Generate candidate short code (or use sanitized custom alias)
+  const candidateCode = sanitizedAlias || generateShortCode(6);
+
+  // 3. Parallelize all independent database & CPU checks concurrently
+  const [, blockCheck, codeConflict, passwordHash, campResult, userTags] = await Promise.all([
+    !skipRateLimit ? checkLinkCreationRateLimit(userId) : Promise.resolve(),
+    isDomainBlocked(cleanUrl),
+    db.link.findUnique({ where: { code: candidateCode }, select: { id: true } }),
+    password && password.trim().length > 0 ? bcrypt.hash(password, 12) : Promise.resolve(null),
+    campaignId ? db.campaign.findUnique({ where: { id: campaignId }, select: { id: true, userId: true } }) : Promise.resolve(null),
+    uniqueTagIds.length > 0 ? db.tag.findMany({ where: { id: { in: uniqueTagIds }, userId }, select: { id: true } }) : Promise.resolve([]),
+  ]);
+
+  if (blockCheck.isBlocked) {
+    throw new LinkServiceError(
+      blockCheck.reason ? `Destination domain is blocked: ${blockCheck.reason}` : "Destination domain is blocked by platform policy.",
+      "BLOCKED_DOMAIN",
+      422
+    );
+  }
+
+  let finalCode = candidateCode;
+  if (codeConflict) {
+    if (sanitizedAlias) {
+      throw new LinkServiceError(
+        `Alias "${sanitizedAlias}" is already in use. Please pick another one.`,
+        "DUPLICATE_ALIAS",
+        409
+      );
+    }
+    // Rare collision on random 6-character code: retry
+    let attempts = 0;
+    let uniqueFound = false;
+    while (attempts < 5 && !uniqueFound) {
+      const candidate = generateShortCode(attempts < 4 ? 6 : 7);
+      const existing = await db.link.findUnique({ where: { code: candidate }, select: { id: true } });
+      if (!existing) {
+        finalCode = candidate;
+        uniqueFound = true;
+      }
+      attempts++;
+    }
+  }
+
   if (campaignId) {
-    const camp = await db.campaign.findUnique({
-      where: { id: campaignId },
-      select: { id: true, userId: true },
-    });
-    if (!camp || camp.userId !== userId) {
+    if (!campResult || campResult.userId !== userId) {
       throw new LinkServiceError("Campaign does not exist or access denied.", "FORBIDDEN", 403);
     }
-    validCampaignId = camp.id;
   }
 
-  // 8. Verify Tag ownership if provided
-  let validTagIds: string[] = [];
-  if (tagIds && tagIds.length > 0) {
-    const uniqueTagIds = Array.from(new Set(tagIds));
-    const userTags = await db.tag.findMany({
-      where: {
-        id: { in: uniqueTagIds },
-        userId,
-      },
-      select: { id: true },
-    });
+  if (uniqueTagIds.length > 0) {
     if (userTags.length !== uniqueTagIds.length) {
       throw new LinkServiceError("One or more tags do not exist or access denied.", "FORBIDDEN", 403);
     }
-    validTagIds = uniqueTagIds;
   }
 
-  // 9. Create the link entity with relations
+  // 4. Create the link entity with relations
   const link = await db.link.create({
     data: {
       code: finalCode,
@@ -398,12 +366,15 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
       clickLimit: parsedLimit,
       passwordHash,
       clicksCount: 0,
-      campaignId: validCampaignId,
-      tags: validTagIds.length > 0 ? {
-        create: validTagIds.map((tagId) => ({ tagId })),
+      campaignId: campResult?.id || null,
+      tags: uniqueTagIds.length > 0 ? {
+        create: uniqueTagIds.map((tagId) => ({ tagId })),
       } : undefined,
     },
     include: {
+      user: {
+        select: { id: true, email: true, name: true, role: true },
+      },
       campaign: {
         select: { id: true, name: true },
       },
@@ -443,6 +414,7 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     uniqueVisitorsCount: 0,
     qrScansCount: 0,
     state,
+    user: link.user,
   };
 }
 
@@ -533,6 +505,8 @@ export async function getUserLinks(
   const links = await db.link.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    take: filters.limit,
+    skip: filters.offset,
     include: {
       campaign: {
         select: { id: true, name: true },
@@ -602,6 +576,8 @@ export async function getAllLinksAdmin(filters: LinkFilters = {}): Promise<LinkW
   const links = await db.link.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    take: filters.limit,
+    skip: filters.offset,
     include: {
       user: {
         select: {
@@ -796,6 +772,7 @@ export async function updateLinkRules(
     where: { id: linkId },
     data: updateData,
     include: {
+      user: { select: { id: true, email: true, name: true, role: true } },
       campaign: { select: { id: true, name: true } },
       tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
     },

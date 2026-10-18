@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LinksTable, LinkItem } from "@/components/LinksTable";
-import { LoadingScreen } from "@/components/LoadingScreen";
+import { LoadingScreen, clearLoadingStarted } from "@/components/LoadingScreen";
 import {
   Shield,
   Globe,
@@ -71,8 +71,18 @@ export default function AdminPage() {
       const startTime = Date.now();
       try {
         setFetchError(null);
-        const meRes = await fetch("/api/auth/me");
-        const meData = await meRes.json();
+        // Parallelize all admin resources concurrently
+        const [meRes, linksRes, blockedRes] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/links?scope=all"),
+          fetch("/api/admin/blocked-domains"),
+        ]);
+
+        const [meData, linksData, blockedData] = await Promise.all([
+          meRes.json(),
+          linksRes.json(),
+          blockedRes.json(),
+        ]);
 
         if (!meData.user) {
           router.push("/login");
@@ -81,26 +91,14 @@ export default function AdminPage() {
 
         if (meData.user.role !== "ADMIN") {
           setForbidden(true);
+          clearLoadingStarted("admin");
           setInitialLoading(false);
           return;
         }
 
-        setUser(meData.user);
-
-        // Fetch all system links and blocked domains concurrently
-        const [linksRes, blockedRes] = await Promise.all([
-          fetch("/api/links?scope=all"),
-          fetch("/api/admin/blocked-domains"),
-        ]);
-
         if (!linksRes.ok || !blockedRes.ok) {
           throw new Error("Failed to load admin resources.");
         }
-
-        const [linksData, blockedData] = await Promise.all([
-          linksRes.json(),
-          blockedRes.json(),
-        ]);
 
         // Smooth anti-flash minimum display time for initial load (320ms)
         if (isInitial) {
@@ -110,9 +108,11 @@ export default function AdminPage() {
           }
         }
 
+        setUser(meData.user);
         setLinks(linksData.links || []);
         const domainList = blockedData.blockedDomains || blockedData.domains || [];
         setBlockedDomains(domainList);
+        clearLoadingStarted("admin");
         setInitialLoading(false);
       } catch (err) {
         console.error("Admin fetch error:", err);
@@ -160,10 +160,31 @@ export default function AdminPage() {
       if (!res.ok) {
         setDomainError(data.error || "Failed to block domain.");
       } else {
-        setDomainSuccess(`Domain "${data.blockedDomain.domain}" has been added to the blocklist.`);
+        const addedItem = data.blockedDomain;
+        setDomainSuccess(`Domain "${addedItem.domain}" has been added to the blocklist.`);
         setNewDomain("");
         setNewReason("");
-        await fetchAdminData();
+        // Directly update local state from mutation response without expensive full-registry refetch
+        setBlockedDomains((prev) => [addedItem, ...prev.filter((d) => d.id !== addedItem.id)]);
+
+        // Keep admin links table state accurate: reflect blocked domain on affected links
+        const blockedHost = addedItem.domain.toLowerCase();
+        setLinks((prev) =>
+          prev.map((l) => {
+            try {
+              const url = new URL(l.destinationUrl);
+              const host = url.hostname.toLowerCase();
+              if (host === blockedHost || host.endsWith("." + blockedHost)) {
+                return {
+                  ...l,
+                  state: "disabled" as const,
+                  disabledReason: `Blocked domain: ${addedItem.domain}`,
+                };
+              }
+            } catch {}
+            return l;
+          })
+        );
       }
     } catch {
       setDomainError("Network error while adding blocked domain.");
@@ -183,6 +204,21 @@ export default function AdminPage() {
     // Optimistic immediate removal from list (0ms perceived latency)
     setBlockedDomains((prev) => prev.filter((d) => d.id !== id));
     setDeletingId(id);
+
+    // Re-activate links that were disabled specifically due to this blocked domain
+    const unblockedHost = domain.toLowerCase();
+    setLinks((prev) =>
+      prev.map((l) => {
+        if (l.disabledReason === `Blocked domain: ${domain}`) {
+          return {
+            ...l,
+            state: "active" as const,
+            disabledReason: null,
+          };
+        }
+        return l;
+      })
+    );
 
     try {
       const res = await fetch(`/api/admin/blocked-domains/${id}`, {
@@ -411,10 +447,20 @@ export default function AdminPage() {
                 type="submit"
                 className="btn btn-primary flex items-center justify-center gap-2"
                 disabled={addingDomain}
+                aria-busy={addingDomain}
                 style={{ width: "100%", minHeight: "44px" }}
               >
-                <Plus size={16} strokeWidth={2.5} />
-                <span>{addingDomain ? "Adding..." : "Add Blocked Domain"}</span>
+                {addingDomain ? (
+                  <>
+                    <RefreshCw size={16} className="spin" />
+                    <span>Adding to Blocklist...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} strokeWidth={2.5} />
+                    <span>Add Blocked Domain</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

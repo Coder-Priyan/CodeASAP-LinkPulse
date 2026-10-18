@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { LinkItem } from "./LinksTable";
-import { X, Save, Clock, Gauge, Lock, AlertCircle, Globe, Layers, Tag as TagIcon, Sliders, Copy, Check } from "lucide-react";
+import { X, Save, Clock, Gauge, Lock, AlertCircle, Globe, Layers, Tag as TagIcon, Sliders, Copy, Check, RefreshCw } from "lucide-react";
 import { buildShortUrl } from "@/lib/utils/short-url";
 
 interface EditLinkModalProps {
   link: LinkItem;
   isOpen: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (updatedLink?: LinkItem) => void;
 }
 
 interface CampaignOption {
@@ -152,7 +152,32 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
         throw new Error(data.error || "Failed to update link rules.");
       }
 
-      onSaved();
+      const isPastExpiry = Boolean(expiresAt && new Date(expiresAt).getTime() <= Date.now());
+      const isLimitReached = Boolean(clickLimit && (link.clicksCount || 0) >= parseInt(clickLimit, 10));
+      let computedState: "active" | "disabled" | "expired" | "limit_reached" = "active";
+      if (!isActive) {
+        computedState = "disabled";
+      } else if (isPastExpiry) {
+        computedState = "expired";
+      } else if (isLimitReached) {
+        computedState = "limit_reached";
+      }
+
+      const updatedLinkItem: LinkItem = {
+        ...link,
+        title: data.link.title ?? (title.trim() || null),
+        destinationUrl: data.link.destinationUrl || destinationUrl.trim(),
+        isActive: data.link.isActive,
+        state: computedState,
+        disabledReason: data.link.disabledReason || null,
+        expiresAt: data.link.expiresAt || null,
+        clickLimit: data.link.clickLimit || null,
+        hasPassword: removePassword ? false : (newPassword.trim() ? true : link.hasPassword),
+        campaign: campaigns.find((c) => c.id === campaignId) || null,
+        tags: tags.filter((t) => selectedTagIds.includes(t.id)),
+      };
+
+      onSaved(updatedLinkItem);
       onClose();
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -440,9 +465,23 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
             <button type="button" onClick={onClose} className="btn btn-secondary" disabled={loading}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary flex items-center gap-2" disabled={loading}>
-              <Save size={16} />
-              <span>{loading ? "Saving Rules..." : "Save Changes"}</span>
+            <button
+              type="submit"
+              className="btn btn-primary flex items-center gap-2"
+              disabled={loading}
+              aria-busy={loading}
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={16} className="spin" />
+                  <span>Saving Rules...</span>
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  <span>Save Changes</span>
+                </>
+              )}
             </button>
           </div>
         </form>

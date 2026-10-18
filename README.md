@@ -343,7 +343,7 @@ All routes require a valid session cookie (set at login) except register, login,
 | `POST` | `/api/auth/login` | Anyone | Log in, receive session cookie |
 | `POST` | `/api/auth/logout` | Authenticated | Clear session cookie |
 | `GET` | `/api/auth/me` | Authenticated | Return current session user |
-| `GET` | `/api/links` | Authenticated | List own links; query params: `campaignId`, `tagId`; ADMIN + `scope=all` returns all links |
+| `GET` | `/api/links` | Authenticated | List own links; query params: `campaignId`, `tagId`, `limit`, `offset`; ADMIN + `scope=all` returns all links (supports optional backward-compatible pagination) |
 | `POST` | `/api/links` | Authenticated | Create a link with optional title, alias, rules, campaign, tags (rate-limited: 15/min per user) |
 | `PATCH` | `/api/links/[id]` | Owner or ADMIN | Update title, destination URL, rules, active state, password, campaign, tags (enforces ownership) |
 | `DELETE` | `/api/links/[id]` | Owner or ADMIN | Delete a link |
@@ -373,6 +373,44 @@ To prevent connection saturation and remote database round-trips under high-traf
 - **In-Process Invalidation**: Administrative mutations (`POST` / `DELETE` on `/api/admin/blocked-domains`) immediately clear the local instance cache via `invalidateBlockedDomainCache()`.
 - **Multi-Instance / Serverless Tradeoff**: In horizontally scaled or serverless deployments (e.g. AWS Lambda, Vercel, multi-pod Kubernetes), instances that did not handle the admin write converge within the 5-second TTL window. During this bounded 5-second staleness window, a newly added blocked domain may still allow redirects on other instances before their local TTL expires. This tradeoff prioritizes redirect path throughput and prevents database connection pool exhaustion while bounding propagation delay to 5 seconds.
 - **Test Isolation**: In test environments (`NODE_ENV === "test"` or `process.env.VITEST`), the TTL defaults to 0 to guarantee that test fixtures created in the database are reflected instantaneously without artificial sleep delays. Tests can inject custom clocks and TTL overrides via `setClockForTesting` and `setCacheTtlForTesting`.
+
+---
+
+## Interaction Responsiveness & Benchmarking Scripts
+
+To evaluate perceived speed, interaction latencies, and loading transitions, LinkPulse includes production-grade Playwright measurement and screenshot scripts. Note: `playwright` was added as a `devDependency` in `package.json`.
+
+All scripts are completely credential-free: they read configuration from environment variables or dynamically resolve test admin users from the local database fallback, guaranteeing no hardcoded passwords, tokens, or secrets.
+
+### Available Scripts
+
+1. **Unthrottled Interaction Responsiveness Benchmark**:
+   ```bash
+   # Run 10 iterations measuring visual change latency and total completion time
+   BASE_URL="http://localhost:3001" RUNS=10 npx tsx scripts/measure_baseline_interactions.ts
+   ```
+2. **Throttled Network Interaction Benchmark (100ms RTT / Slow 4G)**:
+   ```bash
+   # Emulates 100ms RTT, 1.5 Mbps download, 750 kbps upload
+   BASE_URL="http://localhost:3001" RUNS=10 npx tsx scripts/measure_throttled.ts
+   ```
+3. **1280px Pending State Screenshots**:
+   ```bash
+   # Captures pending button/page states for Dashboard, Analytics, and Admin under 100ms throttling
+   BASE_URL="http://localhost:3001" npx tsx scripts/capture_responsiveness_screenshots.ts
+   ```
+4. **Database Cleanliness Verification**:
+   ```bash
+   # Verifies zero leftover test domains, test links, or test users in the database
+   npx tsx scripts/verify_db_cleanliness.ts
+   ```
+
+### Environment Variables for Scripts
+
+- `BASE_URL`: Target server URL (default: `http://localhost:3001`). Must point to a production build (`npm run build && npx next start -p 3001`).
+- `ADMIN_USER_ID` & `ADMIN_EMAIL`: Optional overrides for admin credentials. If unset, scripts query `db.user.findFirst({ where: { role: 'ADMIN' } })`.
+- `RUNS`: Number of measurement iterations (default: `10`).
+- `ARTIFACT_DIR`: Output directory for screenshots.
 
 ---
 

@@ -36,6 +36,7 @@ export default function LoginPage() {
         throw new Error(data.error || "Please check your email and password and try again.");
       }
 
+      window.dispatchEvent(new Event("auth-change"));
       router.push("/dashboard");
       router.refresh();
     } catch (err: unknown) {

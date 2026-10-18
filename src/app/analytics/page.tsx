@@ -25,7 +25,7 @@ import {
 import { AnalyticsReport, AnalyticsPeriod, LinkAlert } from "@/lib/services/analytics.service";
 import Link from "next/link";
 import { PulseMascot } from "@/components/PulseMascot";
-import { LoadingScreen } from "@/components/LoadingScreen";
+import { LoadingScreen, clearLoadingStarted } from "@/components/LoadingScreen";
 
 interface UserInfo {
   userId: string;
@@ -63,6 +63,16 @@ export default function AnalyticsPage() {
         params.set("period", period);
         if (campaignId) params.set("campaignId", campaignId);
         if (scope === "all") params.set("scope", "all");
+
+        if (!isInitial && user) {
+          // Fast path for filter updates: only fetch updated analytics report
+          setRefreshing(true);
+          const analyticsRes = await fetch(`/api/analytics?${params.toString()}`);
+          if (!analyticsRes.ok) throw new Error("Failed to load analytics");
+          const analyticsData = await analyticsRes.json();
+          setReport(analyticsData.report || null);
+          return;
+        }
 
         // Concurrent fetch across auth session, campaigns, and analytics in a single network round
         const [meRes, campRes, analyticsRes] = await Promise.all([
@@ -102,6 +112,7 @@ export default function AnalyticsPage() {
         setUser(meData.user);
         setCampaigns(campData.campaigns || []);
         setReport(analyticsData.report || null);
+        clearLoadingStarted("analytics");
         setInitialLoading(false);
       } catch (err) {
         console.error("Failed to load analytics:", err);
@@ -112,7 +123,7 @@ export default function AnalyticsPage() {
         setRefreshing(false);
       }
     },
-    [period, campaignId, scope, router]
+    [period, campaignId, scope, router, user]
   );
 
   useEffect(() => {

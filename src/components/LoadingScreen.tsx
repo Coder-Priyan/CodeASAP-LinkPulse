@@ -24,6 +24,19 @@ export interface LoadingScreenProps {
   clock?: () => number;
 }
 
+const globalLoadingStartTimes = new Map<string, number>();
+
+export function markLoadingStarted(pageName: string): number {
+  if (!globalLoadingStartTimes.has(pageName)) {
+    globalLoadingStartTimes.set(pageName, Date.now());
+  }
+  return globalLoadingStartTimes.get(pageName)!;
+}
+
+export function clearLoadingStarted(pageName: string): void {
+  globalLoadingStartTimes.delete(pageName);
+}
+
 export function LoadingScreen({
   pageName = "default",
   headline,
@@ -41,10 +54,15 @@ export function LoadingScreen({
   const retryBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const startTime = clock();
+    const isCustomClock = clock !== Date.now;
+    const startTime = isCustomClock ? clock() : markLoadingStarted(pageName);
+
+    const now = clock();
+    setElapsedMs(Math.max(0, now - startTime));
+
     const interval = setInterval(() => {
-      const now = clock();
-      const currentElapsed = now - startTime;
+      const currentNow = clock();
+      const currentElapsed = currentNow - startTime;
       setElapsedMs(currentElapsed);
 
       if (currentElapsed >= timeoutMs) {
@@ -53,7 +71,7 @@ export function LoadingScreen({
     }, 150);
 
     return () => clearInterval(interval);
-  }, [clock, timeoutMs]);
+  }, [clock, timeoutMs, pageName]);
 
   const state = computeLoadingState({
     elapsedMs,

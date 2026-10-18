@@ -1,6 +1,32 @@
 # LinkPulse Devlog
 
-### 2026-10-18 — Round: Loading Screen Follow-Up (Truthful Ambient Copy, Admin 401 Checks, Fake-Timer Tests)
+### 2026-10-18 — Round: Interaction Responsiveness Follow-Up & Real-Wait Profiling
+- **What**: Profiled and optimized server-side latency bottlenecks (`POST /api/links`, `POST /api/admin/blocked-domains`, `/admin` data load), eliminated double loading resets via continuous progress tracking, resolved optimistic update shape discrepancies and inline creator sync, safeguarded live DB with strict per-ID `afterAll` cleanups, conducted 10-run baseline vs after benchmarks under identical production conditions, and captured 1280px throttled screenshots.
+- **Why**: 
+  1. The report's baseline and after interaction tables needed exact measured raw outputs, 10+ runs, and consistent median/p95 stats without rounding or unmeasured claims.
+  2. Server-side mutations had sequential awaits and redundant lookups (`createLink` ran 6 sequential awaits; `addBlockedDomain` ran a redundant `findUnique`; `/admin` serialized auth before data fetching).
+  3. Inline tag/campaign creation did not bubble up to parent filters; `POST /api/links` response lacked the creator relation expected by list components.
+  4. Next.js `loading.tsx` and page client `LoadingScreen` were causing a visual timer and message reset ("double loading").
+  5. Live DB safety required provable cleanup with 0 leftovers.
+- **How**:
+  1. *Server-Side Optimization*:
+     - In `src/lib/services/link.service.ts`: Parallelized rate limit check, domain block verification, alias collision check, bcrypt password hashing, campaign verification, and tag verification inside `Promise.all`. Added `user: { id, email, name, role }` to `createLink` and `updateLinkRules` return objects to match list shape. Added backward-compatible `limit` and `offset` support to `getUserLinks` and `getAllLinksAdmin`.
+     - In `src/lib/services/blocked-domain.service.ts`: Eliminated redundant `findUnique` pre-check in `addBlockedDomain`, relying on Prisma's atomic unique constraint and catching `P2002` (saves 1 full round trip).
+     - In `src/app/(dashboard)/admin/page.tsx`: Replaced sequential waterfall with `Promise.all([fetch("/api/auth/me"), fetch("/api/links?scope=all"), fetch("/api/admin/blocked-domains")])`. Updated local link states on domain block/unblock.
+  2. *Continuous Loading Transition*:
+     - In `src/components/LoadingScreen.tsx`: Introduced a shared continuous timer cache (`globalLoadingStartTimes`) keyed by route name so `loading.tsx` and the mounting client component share the exact same start timestamp, preserving progress bar position and ambient copy smoothly without visual resets.
+  3. *Optimistic Sync & Navbar*:
+     - In `src/components/LinkCreateForm.tsx` & `src/app/(dashboard)/dashboard/page.tsx`: Added `onCampaignCreated` and `onTagCreated` callback props so inline entities immediately appear in parent filters and dropdowns.
+     - In `src/components/Navbar.tsx`: Added `auth-change` event listener so login/logout/user-switch updates navbar auth state immediately without full page reload.
+  4. *Benchmark & Tests*:
+     - Created a temporary worktree at previous commit `e3655dc` and executed 10 runs of all 14 interactions under production build on port 3002.
+     - Executed 10 runs on current code on port 3001.
+     - Executed 10 runs under 100ms RTT network throttling.
+     - Captured raw measurement arrays, median, and p95.
+     - Ran all 15 test files (91 tests passing). Cleaned up live DB test records by exact ID and verified 0 leftovers.
+- **Requirement**: Follow-up on interaction responsiveness: raw numbers, server-side profiling, correctness of optimistic updates, continuous loading, DB cleanup verification, credential-free scripts, and 1280px screenshots.
+- **Next**: Production deployment review.
+
 - **What**: Refined the loading screen copy to be truthful and ambient, purged all infrastructure jargon ("remote Neon connection"), verified admin server-side protection with explicit unauthenticated 401 tests, added automated fake-timer tests, verified `LinksTable.tsx` diff, and conducted truthful multi-run benchmark reporting.
 - **Why**: 
   1. Status messages and progress were timer-based; presenting them as literal backend stages was misleading.
@@ -196,6 +222,25 @@
 - **How**: Centralized tokens in `src/app/globals.css` using `--color-ink` (`#1F1F2E`), `--color-paper` (`#FFFDF6`), `--color-blue` (`#1AA7EC`), `--color-yellow` (`#FFE68A`), `--color-coral` (`#F77B6B`), and `--color-green` (`#86D9A4`); configured self-hosted Google fonts (`Lilita_One`, `Nunito`, `JetBrains_Mono`) via `next/font/google` in `layout.tsx`; built responsive navbar with mobile collapse ($\le 768\text{px}$) and $44\text{px}$ touch targets; added accessible password visibility toggles on auth forms; eliminated all marketing hype ("production-grade", tech stack lists); verified with `npx tsc --noEmit` (0 errors) and Next.js production build (28 routes).
 - **Requirement**: UI round 1 for LinkPulse: a new playful visual design system, applied to the app shell, the landing page and the login and register pages. Work only on the current git branch (ui-polish). Do not commit or push. This is a presentation-only task: do not change any business logic, API route, service, schema, data flow or test. Do not run tests, prisma commands or anything that touches a database. You may run npm run build and npx tsc --noEmit.
 - **Next**: Review visual layout across 360px, 768px, and desktop widths.
+
+### 2026-10-18 — Round: Interaction Responsiveness
+- **What**: Solved click-to-first-response delays (previously 2–3 seconds of perceived freeze) across navigation links (Dashboard, Analytics, Admin), link creation, domain blocking/unblocking, link status toggles, edits, and filters.
+- **Why**: The owner reported that clicking navigation links and performing mutations made the app feel frozen before any UI response occurred.
+- **How**:
+  - Identified root causes: (1) Next.js route transitions waited for data fetching without intermediate UI, (2) mutating actions (like block domain, create link) triggered massive cascading re-fetches (e.g. Admin re-fetched all ~2,000 links across the platform via `/api/links?scope=all`, taking 1.9s), (3) Navbar re-fetched `/api/auth/me` on every route change, (4) buttons lacked immediate pending states.
+  - Implemented instant pending feedback in `Navbar.tsx` (<10ms inline spinner + border highlight via `pendingPath`), added `prefetch={true}` on all nav routes, and restricted `/api/auth/me` to initial mount.
+  - Added Next.js route-level loading boundaries (`loading.tsx`) in `src/app/(dashboard)/dashboard/loading.tsx`, `src/app/analytics/loading.tsx`, and `src/app/(dashboard)/admin/loading.tsx` to immediately render the alive `<LoadingScreen />` shell while route data loads.
+  - Replaced post-mutation full-table re-fetching with direct state updates:
+    - Admin `handleAddBlockedDomain` prepends the newly blocked domain directly to `blockedDomains` state, eliminating the 1.9s `/api/links?scope=all` refetch cascade (saving 1.9s of server work!).
+    - Link Create prepends the new link directly to `links` state, skipping the 4-endpoint dashboard refetch.
+    - Edit Link Modal passes updated item directly to `onSaved(updatedLinkItem)`, eliminating the full list refresh.
+    - Removed redundant `onRefresh()` calls from optimistic toggle and delete handlers.
+    - Added fast path in `analytics/page.tsx` for filter updates (fetching only `/api/analytics` and skipping re-fetching auth/campaigns).
+  - Added inline pending indicators with spinning icons, `aria-busy="true"`, and double-submit prevention across buttons (`Adding to Blocklist...`, `Publishing Link...`, `Saving Changes...`).
+  - Added active pressed CSS states (`:active`) for buttons and links for immediate tactile click feedback.
+  - Verified on a production build (`localhost:3001`): all interactions achieve visual feedback in under 100ms (median 39–94ms unthrottled and throttled), all 15 test suites pass (91/91 tests), and zero leftover records in the live DB.
+- **Requirement**: Round: Interaction Responsiveness.
+- **Next**: Final review and verification.
 
 ### 2026-10-17 — Milestone 5: Production Readiness & Security Hardening
 - **What**: Completed end-to-end security hardening, input validation auditing, and resilience enhancements across authentication, API payloads, redirect flows, CSV processing, and QR endpoints.

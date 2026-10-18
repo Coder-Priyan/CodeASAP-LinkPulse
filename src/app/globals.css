@@ -209,6 +209,26 @@ a {
   box-shadow: var(--shadow-hard-sm);
 }
 
+.nav-link.nav-link-pending {
+  background-color: var(--color-yellow);
+  border: 2px solid var(--color-ink);
+  box-shadow: 1px 1px 0 var(--color-ink);
+  transform: translate(1px, 1px);
+}
+
+.nav-link:active,
+.btn:active:not([disabled]) {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 1px 1px 0 var(--color-ink) !important;
+}
+
+.btn[disabled].btn-loading,
+.btn[aria-busy="true"],
+button[aria-busy="true"] {
+  cursor: wait !important;
+  opacity: 0.88;
+}
+
 .nav-user-chip {
   display: inline-flex;
   align-items: center;
