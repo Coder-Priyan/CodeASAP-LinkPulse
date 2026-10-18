@@ -25,6 +25,7 @@ import {
 import { AnalyticsReport, AnalyticsPeriod, LinkAlert } from "@/lib/services/analytics.service";
 import Link from "next/link";
 import { PulseMascot } from "@/components/PulseMascot";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
 interface UserInfo {
   userId: string;
@@ -45,61 +46,82 @@ export default function AnalyticsPage() {
   const [period, setPeriod] = useState<AnalyticsPeriod>("7d");
   const [campaignId, setCampaignId] = useState<string>("");
   const [scope, setScope] = useState<"me" | "all">("me");
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Analytics | LinkPulse";
   }, []);
 
-  const fetchAnalytics = useCallback(async () => {
-    try {
-      const params = new URLSearchParams();
-      params.set("period", period);
-      if (campaignId) params.set("campaignId", campaignId);
-      if (scope === "all") params.set("scope", "all");
+  const fetchAnalytics = useCallback(
+    async (isInitial = false) => {
+      const startTime = Date.now();
+      try {
+        setFetchError(null);
+        const params = new URLSearchParams();
+        params.set("period", period);
+        if (campaignId) params.set("campaignId", campaignId);
+        if (scope === "all") params.set("scope", "all");
 
-      // Concurrent fetch across auth session, campaigns, and analytics in a single network round
-      const [meRes, campRes, analyticsRes] = await Promise.all([
-        fetch("/api/auth/me"),
-        fetch("/api/campaigns"),
-        fetch(`/api/analytics?${params.toString()}`),
-      ]);
+        // Concurrent fetch across auth session, campaigns, and analytics in a single network round
+        const [meRes, campRes, analyticsRes] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/campaigns"),
+          fetch(`/api/analytics?${params.toString()}`),
+        ]);
 
-      if (meRes.status === 401) {
-        router.push("/login");
-        return;
+        if (meRes.status === 401) {
+          router.push("/login");
+          return;
+        }
+
+        if (!meRes.ok || !campRes.ok || !analyticsRes.ok) {
+          throw new Error("One or more analytics requests failed.");
+        }
+
+        const [meData, campData, analyticsData] = await Promise.all([
+          meRes.json(),
+          campRes.json(),
+          analyticsRes.json(),
+        ]);
+
+        if (!meData.user) {
+          router.push("/login");
+          return;
+        }
+
+        // Smooth anti-flash minimum display time for initial load (320ms)
+        if (isInitial) {
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 320) {
+            await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+          }
+        }
+
+        setUser(meData.user);
+        setCampaigns(campData.campaigns || []);
+        setReport(analyticsData.report || null);
+        setInitialLoading(false);
+      } catch (err) {
+        console.error("Failed to load analytics:", err);
+        if (isInitial) {
+          setFetchError("Unable to compile live analytics. Please check your network and retry.");
+        }
+      } finally {
+        setRefreshing(false);
       }
-
-      const [meData, campData, analyticsData] = await Promise.all([
-        meRes.json(),
-        campRes.json(),
-        analyticsRes.json(),
-      ]);
-
-      if (!meData.user) {
-        router.push("/login");
-        return;
-      }
-
-      setUser(meData.user);
-      setCampaigns(campData.campaigns || []);
-      setReport(analyticsData.report || null);
-    } catch (err) {
-      console.error("Failed to load analytics:", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [period, campaignId, scope, router]);
+    },
+    [period, campaignId, scope, router]
+  );
 
   useEffect(() => {
-    fetchAnalytics();
+    fetchAnalytics(true);
   }, [fetchAnalytics]);
 
   const handleManualRefresh = () => {
     setRefreshing(true);
-    fetchAnalytics();
+    fetchAnalytics(false);
   };
 
   const renderAlertBadge = (type: LinkAlert["type"]) => {
@@ -154,7 +176,21 @@ export default function AnalyticsPage() {
     0
   ) || 1;
 
-  const hasAnyData = loading || (report?.metrics.totalClicks ?? 0) > 0 || (report?.metrics.totalLinks ?? 0) > 0;
+  if (initialLoading) {
+    return (
+      <LoadingScreen
+        pageName="analytics"
+        error={fetchError}
+        onRetry={() => {
+          setFetchError(null);
+          setInitialLoading(true);
+          fetchAnalytics(true);
+        }}
+      />
+    );
+  }
+
+  const hasAnyData = (report?.metrics.totalClicks ?? 0) > 0 || (report?.metrics.totalLinks ?? 0) > 0;
 
   return (
     <div className="container container-wide" style={{ paddingTop: "2.5rem", paddingBottom: "4rem" }}>
@@ -340,7 +376,7 @@ export default function AnalyticsPage() {
               <MousePointerClick size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.totalClicks ?? 0).toLocaleString()}</div>
+          <div className="stat-value">{(report?.metrics.totalClicks ?? 0).toLocaleString()}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Human visits ({period.toUpperCase()})
           </span>
@@ -353,7 +389,7 @@ export default function AnalyticsPage() {
               <Users size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.uniqueVisitors ?? 0).toLocaleString()}</div>
+          <div className="stat-value">{(report?.metrics.uniqueVisitors ?? 0).toLocaleString()}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Different visitors
           </span>
@@ -366,7 +402,7 @@ export default function AnalyticsPage() {
               <CheckCircle size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.activeLinks ?? 0)}</div>
+          <div className="stat-value">{report?.metrics.activeLinks ?? 0}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Out of {report?.metrics.totalLinks ?? 0} total links
           </span>
@@ -379,7 +415,7 @@ export default function AnalyticsPage() {
               <QrCode size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.qrScans ?? 0)}</div>
+          <div className="stat-value">{report?.metrics.qrScans ?? 0}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             {report?.metrics.qrScans ?? 0} QR · {report?.metrics.directClicks ?? 0} direct
           </span>
@@ -392,7 +428,7 @@ export default function AnalyticsPage() {
               <Layers size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.campaignPerformance.length ?? 0)}</div>
+          <div className="stat-value">{report?.campaignPerformance.length ?? 0}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Configured campaigns
           </span>
@@ -417,53 +453,7 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        {loading ? (
-          <div style={{ overflowX: "auto", paddingBottom: "0.5rem" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                gap: "0.6rem",
-                height: "200px",
-                paddingTop: "24px",
-                paddingBottom: "8px",
-                borderBottom: "2px solid var(--color-ink)",
-              }}
-            >
-              {[35, 65, 40, 85, 55, 70, 90].map((h, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    height: "100%",
-                    justifyContent: "flex-end",
-                  }}
-                >
-                  <div
-                    className="skeleton-box"
-                    style={{
-                      width: "100%",
-                      maxWidth: "36px",
-                      height: `${h}%`,
-                      borderRadius: "4px 4px 0 0",
-                    }}
-                  />
-                  <div
-                    className="skeleton-box"
-                    style={{
-                      width: "28px",
-                      height: "12px",
-                      marginTop: "8px",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : report && report.clicksOverTime.length > 0 ? (
+        {report && report.clicksOverTime.length > 0 ? (
           <div>
             {/* Accessible screen reader data table */}
             <div className="sr-only">

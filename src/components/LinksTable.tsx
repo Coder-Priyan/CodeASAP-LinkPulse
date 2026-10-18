@@ -20,6 +20,7 @@ import {
   BarChart2,
   X,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { EditLinkModal } from "./EditLinkModal";
 import { QrModal } from "./QrModal";
@@ -279,20 +280,12 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
 
   if (loading) {
     return (
-      <div className="card" style={{ padding: 0, overflow: "hidden", backgroundColor: "var(--color-white)" }}>
+      <div className="card" style={{ padding: "3rem 1.5rem", textAlign: "center", backgroundColor: "var(--color-white)" }}>
         <div className="sr-only" aria-live="polite">Loading links...</div>
-        <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1.5px solid var(--color-ink-faint)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div className="skeleton-box" style={{ width: "160px", height: "1.5rem" }} />
-          <div className="skeleton-box" style={{ width: "220px", height: "2.25rem" }} />
-        </div>
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="skeleton-table-row">
-            <div className="skeleton-box" style={{ width: "120px", height: "1.75rem" }} />
-            <div className="skeleton-box" style={{ width: "35%", height: "1.25rem" }} />
-            <div className="skeleton-box" style={{ width: "80px", height: "1.5rem" }} />
-            <div className="skeleton-box" style={{ width: "140px", height: "1.5rem", marginLeft: "auto" }} />
-          </div>
-        ))}
+        <RefreshCw size={24} className="spin" style={{ margin: "0 auto 0.75rem", color: "var(--color-blue)" }} />
+        <p style={{ color: "var(--color-ink-muted)", fontSize: "0.95rem", fontWeight: 600 }}>
+          Loading link list...
+        </p>
       </div>
     );
   }

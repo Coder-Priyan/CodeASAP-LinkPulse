@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LinkCreateForm } from "@/components/LinkCreateForm";
 import { LinksTable, LinkItem } from "@/components/LinksTable";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import {
   Link2,
   MousePointerClick,
@@ -47,69 +48,104 @@ export default function DashboardPage() {
   const [tags, setTags] = useState<TagOption[]>([]);
   const [filterCampaignId, setFilterCampaignId] = useState<string>("");
   const [filterTagId, setFilterTagId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Dashboard | LinkPulse";
   }, []);
 
-  const fetchUserData = useCallback(async () => {
-    try {
-      const params = new URLSearchParams();
-      if (filterCampaignId) params.set("campaignId", filterCampaignId);
-      if (filterTagId) params.set("tagId", filterTagId);
+  const fetchUserData = useCallback(
+    async (isInitial = false) => {
+      const startTime = Date.now();
+      try {
+        setFetchError(null);
+        const params = new URLSearchParams();
+        if (filterCampaignId) params.set("campaignId", filterCampaignId);
+        if (filterTagId) params.set("tagId", filterTagId);
 
-      // Fetch user profile, campaigns, tags, and links concurrently in a single parallel network round
-      const [meRes, campRes, tagRes, linksRes] = await Promise.all([
-        fetch("/api/auth/me"),
-        fetch("/api/campaigns"),
-        fetch("/api/tags"),
-        fetch(`/api/links?${params.toString()}`),
-      ]);
+        // Fetch user profile, campaigns, tags, and links concurrently in a single parallel network round
+        const [meRes, campRes, tagRes, linksRes] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/campaigns"),
+          fetch("/api/tags"),
+          fetch(`/api/links?${params.toString()}`),
+        ]);
 
-      if (meRes.status === 401) {
-        router.push("/login");
-        return;
+        if (meRes.status === 401) {
+          router.push("/login");
+          return;
+        }
+
+        if (!meRes.ok || !campRes.ok || !tagRes.ok || !linksRes.ok) {
+          throw new Error("One or more dashboard requests failed.");
+        }
+
+        const [meData, campData, tagData, linksData] = await Promise.all([
+          meRes.json(),
+          campRes.json(),
+          tagRes.json(),
+          linksRes.json(),
+        ]);
+
+        if (!meData.user) {
+          router.push("/login");
+          return;
+        }
+
+        // Smooth anti-flash minimum display time for initial load (320ms)
+        if (isInitial) {
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 320) {
+            await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+          }
+        }
+
+        setUser(meData.user);
+        setCampaigns(campData.campaigns || []);
+        setTags(tagData.tags || []);
+        setLinks(linksData.links || []);
+        setInitialLoading(false);
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+        if (isInitial) {
+          setFetchError("Unable to load your dashboard links. Please check your network and retry.");
+        }
+      } finally {
+        setRefreshing(false);
       }
-
-      const [meData, campData, tagData, linksData] = await Promise.all([
-        meRes.json(),
-        campRes.json(),
-        tagRes.json(),
-        linksRes.json(),
-      ]);
-
-      if (!meData.user) {
-        router.push("/login");
-        return;
-      }
-
-      setUser(meData.user);
-      setCampaigns(campData.campaigns || []);
-      setTags(tagData.tags || []);
-      setLinks(linksData.links || []);
-    } catch (err) {
-      console.error("Dashboard fetch error:", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router, filterCampaignId, filterTagId]);
+    },
+    [router, filterCampaignId, filterTagId]
+  );
 
   useEffect(() => {
-    fetchUserData();
+    fetchUserData(true);
   }, [fetchUserData]);
 
   const handleManualRefresh = () => {
     setRefreshing(true);
-    fetchUserData();
+    fetchUserData(false);
   };
 
   const clearFilters = () => {
     setFilterCampaignId("");
     setFilterTagId("");
   };
+
+  if (initialLoading) {
+    return (
+      <LoadingScreen
+        pageName="dashboard"
+        error={fetchError}
+        onRetry={() => {
+          setFetchError(null);
+          setInitialLoading(true);
+          fetchUserData(true);
+        }}
+      />
+    );
+  }
 
   const totalLinks = links.length;
   const totalClicks = links.reduce((acc, l) => acc + (l.clicksCount || 0), 0);
@@ -119,7 +155,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container-wide" style={{ paddingTop: "2.5rem", paddingBottom: "4rem" }}>
-      {loading && <div className="sr-only" aria-live="polite">Loading dashboard links and metrics...</div>}
       {/* Header */}
       <div className="flex items-center justify-between" style={{ marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
         <div>
@@ -194,7 +229,7 @@ export default function DashboardPage() {
               <Link2 size={16} strokeWidth={2.5} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalLinks}</div>
+          <div className="stat-value">{totalLinks}</div>
         </div>
 
         <div className="stat-card stat-card-butter">
@@ -204,7 +239,7 @@ export default function DashboardPage() {
               <MousePointerClick size={16} strokeWidth={2.5} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalClicks.toLocaleString()}</div>
+          <div className="stat-value">{totalClicks.toLocaleString()}</div>
         </div>
 
         <div className="stat-card stat-card-sage">
@@ -214,7 +249,7 @@ export default function DashboardPage() {
               <Users size={16} strokeWidth={2.5} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalUniqueVisitors.toLocaleString()}</div>
+          <div className="stat-value">{totalUniqueVisitors.toLocaleString()}</div>
         </div>
 
         <div className={`stat-card ${attentionLinks > 0 ? "stat-card-coral" : "stat-card-sage"}`}>
@@ -231,17 +266,11 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="stat-value" style={{ fontSize: "1.65rem", marginTop: "0.5rem" }}>
-            {loading ? (
-              <div className="skeleton-stat-num" />
-            ) : (
-              <>
-                <span>{activeLinks} Active</span>
-                {attentionLinks > 0 && (
-                  <span style={{ fontSize: "0.95rem", color: "var(--color-muted)", marginLeft: "0.5rem", fontFamily: "var(--font-sans-family)", fontWeight: 700 }}>
-                    ({attentionLinks} off/limited)
-                  </span>
-                )}
-              </>
+            <span>{activeLinks} Active</span>
+            {attentionLinks > 0 && (
+              <span style={{ fontSize: "0.95rem", color: "var(--color-muted)", marginLeft: "0.5rem", fontFamily: "var(--font-sans-family)", fontWeight: 700 }}>
+                ({attentionLinks} off/limited)
+              </span>
             )}
           </div>
         </div>
@@ -320,7 +349,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <LinksTable links={links} onRefresh={fetchUserData} loading={loading} />
+        <LinksTable links={links} onRefresh={fetchUserData} />
       </div>
     </div>
   );

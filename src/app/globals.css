@@ -1934,57 +1934,150 @@ a {
 }
 
 /* ==========================================================================
-   Perceived Speed: Neo-Brutalist Skeletons & Non-Blocking Layouts
+   Full-Page Alive Loading Screen (Neo-Brutalist & Accessible)
    ========================================================================== */
 
-.skeleton-box {
-  background-color: var(--color-ink-faint);
-  border-radius: var(--radius-sm);
-  display: inline-block;
-  animation: neoSkeletonPulse 1.4s ease-in-out infinite;
-}
-
-.skeleton-text {
-  height: 1rem;
-  background-color: var(--color-ink-faint);
-  border-radius: var(--radius-sm);
-  animation: neoSkeletonPulse 1.4s ease-in-out infinite;
-}
-
-.skeleton-stat-num {
-  height: 2.25rem;
-  width: 90px;
-  background-color: var(--color-ink-faint);
-  border-radius: var(--radius-sm);
-  animation: neoSkeletonPulse 1.4s ease-in-out infinite;
-}
-
-.skeleton-table-row {
+.loading-screen-container {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  border-bottom: 1.5px solid var(--color-ink-faint);
-  background-color: var(--color-white);
+  justify-content: center;
+  min-height: calc(80vh - 120px);
+  padding: 3rem 1.5rem;
+  width: 100%;
 }
 
-@keyframes neoSkeletonPulse {
-  0%, 100% {
-    opacity: 0.45;
+.loading-screen-card {
+  max-width: 460px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.75rem 2rem 2.25rem;
+  text-align: center;
+  background-color: var(--color-white);
+  border: var(--border-thick);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-hard-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-mascot-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.loading-mascot-active {
+  animation: mascotHeartbeat 1.8s ease-in-out infinite;
+}
+
+.loading-mascot-error {
+  animation: none;
+}
+
+@keyframes mascotHeartbeat {
+  0% {
+    transform: scale(1);
   }
-  50% {
-    opacity: 0.9;
+  14% {
+    transform: scale(1.07);
   }
+  28% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.04);
+  }
+  70% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.loading-card-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+  color: var(--color-ink);
+  margin-bottom: 0.5rem;
+}
+
+.loading-step-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-blue);
+  margin-bottom: 0.25rem;
+  transition: color 0.2s ease;
+}
+
+.loading-step-subtitle {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  min-height: 1.35rem;
+}
+
+.loading-progress-track {
+  height: 10px;
+  background-color: var(--color-paper-light);
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin: 1.5rem auto 0.75rem;
+  max-width: 290px;
+}
+
+.loading-progress-bar {
+  height: 100%;
+  background-color: var(--color-teal);
+  border-right: 2px solid var(--color-ink);
+  border-radius: var(--radius-full);
+  transition: width 0.35s ease;
+}
+
+.loading-long-wait-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--color-yellow-light);
+  border: 1.5px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  margin-top: 1rem;
+}
+
+.loading-error-box {
+  margin-top: 0.75rem;
+  background-color: var(--color-coral-light);
+  border: 2px solid var(--color-coral-dark);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1rem;
+  text-align: center;
+}
+
+.loading-error-text {
+  font-size: 0.9rem;
+  color: var(--color-ink);
+  line-height: 1.45;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton-box,
-  .skeleton-text,
-  .skeleton-stat-num,
-  .skeleton-table-row {
-    animation: none;
-    opacity: 0.65;
+  .loading-mascot-active {
+    animation: none !important;
+  }
+  .loading-progress-bar {
+    transition: none !important;
+  }
+  .loading-long-wait-chip .spin {
+    animation: none !important;
   }
 }
+
 
 

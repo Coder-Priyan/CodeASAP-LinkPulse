@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LinksTable, LinkItem } from "@/components/LinksTable";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import {
   Shield,
   Globe,
@@ -47,9 +48,10 @@ export default function AdminPage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [blockedDomains, setBlockedDomains] = useState<BlockedDomainItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // New blocked domain form state
   const [newDomain, setNewDomain] = useState("");
@@ -64,48 +66,68 @@ export default function AdminPage() {
     document.title = "Admin Console | LinkPulse";
   }, []);
 
-  const fetchAdminData = useCallback(async () => {
-    try {
-      const meRes = await fetch("/api/auth/me");
-      const meData = await meRes.json();
+  const fetchAdminData = useCallback(
+    async (isInitial = false) => {
+      const startTime = Date.now();
+      try {
+        setFetchError(null);
+        const meRes = await fetch("/api/auth/me");
+        const meData = await meRes.json();
 
-      if (!meData.user) {
-        router.push("/login");
-        return;
+        if (!meData.user) {
+          router.push("/login");
+          return;
+        }
+
+        if (meData.user.role !== "ADMIN") {
+          setForbidden(true);
+          setInitialLoading(false);
+          return;
+        }
+
+        setUser(meData.user);
+
+        // Fetch all system links and blocked domains concurrently
+        const [linksRes, blockedRes] = await Promise.all([
+          fetch("/api/links?scope=all"),
+          fetch("/api/admin/blocked-domains"),
+        ]);
+
+        if (!linksRes.ok || !blockedRes.ok) {
+          throw new Error("Failed to load admin resources.");
+        }
+
+        const [linksData, blockedData] = await Promise.all([
+          linksRes.json(),
+          blockedRes.json(),
+        ]);
+
+        // Smooth anti-flash minimum display time for initial load (320ms)
+        if (isInitial) {
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 320) {
+            await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+          }
+        }
+
+        setLinks(linksData.links || []);
+        const domainList = blockedData.blockedDomains || blockedData.domains || [];
+        setBlockedDomains(domainList);
+        setInitialLoading(false);
+      } catch (err) {
+        console.error("Admin fetch error:", err);
+        if (isInitial) {
+          setFetchError("Unable to authenticate administrator or load registry. Please retry.");
+        }
+      } finally {
+        setRefreshing(false);
       }
-
-      if (meData.user.role !== "ADMIN") {
-        setForbidden(true);
-        setLoading(false);
-        return;
-      }
-
-      setUser(meData.user);
-
-      // Fetch all system links and blocked domains concurrently
-      const [linksRes, blockedRes] = await Promise.all([
-        fetch("/api/links?scope=all"),
-        fetch("/api/admin/blocked-domains"),
-      ]);
-
-      const [linksData, blockedData] = await Promise.all([
-        linksRes.json(),
-        blockedRes.json(),
-      ]);
-
-      setLinks(linksData.links || []);
-      const domainList = blockedData.blockedDomains || blockedData.domains || [];
-      setBlockedDomains(domainList);
-    } catch (err) {
-      console.error("Admin fetch error:", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router]);
+    },
+    [router]
+  );
 
   useEffect(() => {
-    fetchAdminData();
+    fetchAdminData(true);
   }, [fetchAdminData]);
 
   const handleManualRefresh = () => {
@@ -182,6 +204,20 @@ export default function AdminPage() {
     }
   };
 
+  if (initialLoading) {
+    return (
+      <LoadingScreen
+        pageName="admin"
+        error={fetchError}
+        onRetry={() => {
+          setFetchError(null);
+          setInitialLoading(true);
+          fetchAdminData(true);
+        }}
+      />
+    );
+  }
+
   if (forbidden) {
     return (
       <div className="container container-wide" style={{ maxWidth: "560px", paddingTop: "5rem", textAlign: "center" }}>
@@ -224,7 +260,6 @@ export default function AdminPage() {
 
   return (
     <div className="container container-wide" style={{ paddingTop: "2rem", paddingBottom: "4rem" }}>
-      {loading && <div className="sr-only" aria-live="polite">Loading administrator metrics and links...</div>}
       {/* Top Header */}
       <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem", marginBottom: "2rem" }}>
         <div>
@@ -268,7 +303,7 @@ export default function AdminPage() {
               <Globe size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalLinks}</div>
+          <div className="stat-value">{totalLinks}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Across all accounts
           </span>
@@ -281,7 +316,7 @@ export default function AdminPage() {
               <MousePointerClick size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalClicks.toLocaleString()}</div>
+          <div className="stat-value">{totalClicks.toLocaleString()}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Total platform redirects
           </span>
@@ -294,7 +329,7 @@ export default function AdminPage() {
               <Ban size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : blockedDomains.length}</div>
+          <div className="stat-value">{blockedDomains.length}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Active security filters
           </span>
@@ -312,7 +347,7 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="stat-value" style={{ fontSize: "1.75rem", marginTop: "0.4rem" }}>
-            {loading ? <div className="skeleton-stat-num" /> : <span>{activeLinks} Active</span>}
+            <span>{activeLinks} Active</span>
           </div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             {inactiveOrRestricted > 0 ? `${inactiveOrRestricted} off or restricted` : "All operational"}
@@ -506,7 +541,7 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <LinksTable links={links} isAdminView={true} onRefresh={fetchAdminData} loading={loading} />
+        <LinksTable links={links} isAdminView={true} onRefresh={fetchAdminData} />
       </div>
     </div>
   );

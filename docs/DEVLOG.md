@@ -1,5 +1,18 @@
 # LinkPulse Devlog
 
+### 2026-10-18 — Round: Restore Alive Loading Pages
+- **What**: Restored full-page loading transitions across `/dashboard`, `/analytics`, and `/admin` while completely removing skeleton placeholders (`.skeleton-*`), replacing the dull spinner card with a lively shared neo-brutalist `LoadingScreen` component.
+- **Why**: Skeletons fragmented the page transition feel and were explicitly rejected by the owner. The original loading cards felt frozen. The new full-page loading screen communicates live background activity, brand personality, and reassurance during remote network operations.
+- **How**:
+  1. Built a unified, accessible shared component `src/components/LoadingScreen.tsx` featuring the animated `PulseMascot` with heartbeat breathing (`@keyframes mascotHeartbeat`), rotating contextual steps tied to actual backend stages, a neo-brutalist progress track, and an automatic long-wait reassurance badge (`Working on remote Neon connection...`) if loading exceeds 3.5s.
+  2. Integrated an automatic error boundary state after a 12-second timeout or fetch rejection, presenting a sad mascot, clear error description, and a high-contrast neo-brutalist "Retry Connection" button with auto-focused keyboard navigation.
+  3. Preserved all real-speed optimizations from the previous round (parallel fetching, batched database queries, optimistic UI updates) and kept background data preservation on screen during filter changes and manual refreshes without unmounting.
+  4. Added a smart anti-flash minimum display threshold (320ms) for initial loads to prevent jarring 1-frame flashes on cached responses.
+  5. Completely purged `.skeleton-*` CSS and HTML mockups from `globals.css`, `LinksTable.tsx`, `dashboard/page.tsx`, `analytics/page.tsx`, and `admin/page.tsx`.
+  6. Accessibility: `role="status"`, `aria-live="polite"`, `aria-busy`, and complete `@media (prefers-reduced-motion: reduce)` animation cancellation.
+- **Requirement**: Full-page loading page restoration, removal of skeleton placeholders, alive neo-brutalist design identity, long-wait and timeout retry handling.
+- **Next**: Final deployment.
+
 ### 2026-10-18 — Round: Speed and Perceived Performance
 - **What**: Optimized real response times across analytics service and API routes, eliminated sequential client request waterfalls, replaced full-page blocking spinner cards on `/dashboard`, `/analytics`, and `/admin` with non-blocking neo-brutalist skeletons, and introduced optimistic UI updates for link toggling, row deletion, and domain unblocking.
 - **Why**: Full-page spinner cards ("Loading Dashboard...", "Authenticating Administrator...") made pages feel dead and sluggish while remote Neon database latency blocked the entire layout. Database analytics calculations were executing 7 separate sequential `await` trips over the network, compounding latency up to 2.8s-3.8s.
