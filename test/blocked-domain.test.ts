@@ -7,6 +7,9 @@ import {
   getCandidateDomains,
   isDomainBlocked,
   addBlockedDomain,
+  setClockForTesting,
+  setCacheTtlForTesting,
+  invalidateBlockedDomainCache,
 } from "@/lib/services/blocked-domain.service";
 import { createLink, updateLinkRules, evaluateLinkRules } from "@/lib/services/link.service";
 import { previewCsvImport } from "@/lib/services/csv-import.service";
@@ -499,5 +502,58 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
 
     const count = await db.blockedDomain.count({ where: { domain: "github.com" } });
     expect(count).toBe(1);
+  });
+
+  it("exercises the real blocked-domain cache path with TTL bypass OFF using an injectable clock", async () => {
+    // 1. Configure deterministic clock and 5000ms TTL
+    let currentTime = 1_000_000;
+    setClockForTesting(() => currentTime);
+    setCacheTtlForTesting(5000);
+    invalidateBlockedDomainCache();
+
+    const uniqueDomain = `cache-test-${Date.now()}.net`;
+    const targetUrl = `https://${uniqueDomain}/path`;
+
+    try {
+      // Step A: Domain not in DB -> loads cache at t=1,000,000, returns not blocked
+      const res1 = await isDomainBlocked(targetUrl);
+      expect(res1.isBlocked).toBe(false);
+
+      // Step B: Insert domain directly into DB (bypassing in-process cache, simulating an external multi-instance write)
+      const inserted = await db.blockedDomain.create({
+        data: {
+          domain: uniqueDomain,
+          reason: "Direct DB insertion simulation",
+          createdById: adminUser.id,
+        },
+      });
+      createdBlockedDomainIds.push(inserted.id);
+
+      // Step C: Advance clock by 2,000ms (t = 1,002,000 < t_fetch + 5,000)
+      currentTime += 2000;
+
+      // Because TTL has not expired, check MUST hit cached map and return false
+      const resCached = await isDomainBlocked(targetUrl);
+      expect(resCached.isBlocked).toBe(false);
+
+      // Step D: Advance clock past 5,000ms TTL (t = 1,006,000 > t_fetch + 5,000)
+      currentTime += 4000;
+
+      // Cache has expired, must query DB and return blocked with reason
+      const resRefreshed = await isDomainBlocked(targetUrl);
+      expect(resRefreshed.isBlocked).toBe(true);
+      expect(resRefreshed.matchedDomain).toBe(uniqueDomain);
+      expect(resRefreshed.reason).toBe("Direct DB insertion simulation");
+
+      // Step E: Test immediate in-process invalidation
+      invalidateBlockedDomainCache();
+      const resPostInvalidation = await isDomainBlocked(targetUrl);
+      expect(resPostInvalidation.isBlocked).toBe(true);
+    } finally {
+      // Reset clock and TTL back to test environment defaults
+      setClockForTesting(null);
+      setCacheTtlForTesting(null);
+      invalidateBlockedDomainCache();
+    }
   });
 });

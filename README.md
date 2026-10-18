@@ -364,6 +364,16 @@ All routes require a valid session cookie (set at login) except register, login,
 
 The redirect route is handled by `GET /[code]` (a Next.js route handler, not under `/api`).
 
+### High-throughput redirect architecture & domain cache
+
+LinkPulse evaluates rules on every redirect (`GET /[code]`): link active status, destination domain safety, expiry timestamps, click limits, and passcodes.
+
+To prevent connection saturation and remote database round-trips under high-traffic spikes:
+- **In-Memory Cache**: Blocked domains are loaded once and cached in-memory with a short default TTL of 5 seconds (`DEFAULT_BLOCKED_DOMAIN_CACHE_TTL_MS = 5000`).
+- **In-Process Invalidation**: Administrative mutations (`POST` / `DELETE` on `/api/admin/blocked-domains`) immediately clear the local instance cache via `invalidateBlockedDomainCache()`.
+- **Multi-Instance / Serverless Tradeoff**: In horizontally scaled or serverless deployments (e.g. AWS Lambda, Vercel, multi-pod Kubernetes), instances that did not handle the admin write converge within the 5-second TTL window. During this bounded 5-second staleness window, a newly added blocked domain may still allow redirects on other instances before their local TTL expires. This tradeoff prioritizes redirect path throughput and prevents database connection pool exhaustion while bounding propagation delay to 5 seconds.
+- **Test Isolation**: In test environments (`NODE_ENV === "test"` or `process.env.VITEST`), the TTL defaults to 0 to guarantee that test fixtures created in the database are reflected instantaneously without artificial sleep delays. Tests can inject custom clocks and TTL overrides via `setClockForTesting` and `setCacheTtlForTesting`.
+
 ---
 
 ## Deployment

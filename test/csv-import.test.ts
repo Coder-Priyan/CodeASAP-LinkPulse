@@ -385,21 +385,21 @@ describe("Milestone 4: CSV Bulk Import", () => {
       "destination_url,alias,title\n" +
       `https://pulse-safe-test-target.org/auth1-${ts},auth1-alias-${ts},Auth Test Link`;
 
-    // 1. Foreign campaignId must be rejected with 403
+    // 1. Foreign campaignId must be rejected with 404
     await expect(
       executeCsvImport(csvContent, testUserId, {
         campaignId: foreignCampaign.id,
       })
     ).rejects.toThrow(/Campaign does not exist or access denied/i);
 
-    // 2. Foreign tagId must be rejected with 403
+    // 2. Foreign tagId must be rejected with 404
     await expect(
       executeCsvImport(csvContent, testUserId, {
         tagIds: [foreignTag.id],
       })
     ).rejects.toThrow(/One or more tags do not exist or access denied/i);
 
-    // 3. Via POST /api/links/import/execute endpoint: returns 403 status
+    // 3. Via POST /api/links/import/execute endpoint: returns 404 status
     mockUser = { userId: testUserId, email: testUserEmail, role: Role.USER };
     const req = new NextRequest("http://localhost:3000/api/links/import/execute", {
       method: "POST",
@@ -410,7 +410,7 @@ describe("Milestone 4: CSV Bulk Import", () => {
       }),
     });
     const res = await executeImportHandler(req);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
 
     // Cleanup foreign user, campaign, tag
     await db.campaign.delete({ where: { id: foreignCampaign.id } });

@@ -270,5 +270,17 @@ Desktop viewports ($\ge 1024\text{px}$) in Round 2 receive major functional UX e
 ### 5. Password Strength Feedback (`/register`)
 - Real-time 4-segment neo-brutalist strength meter on the registration form providing instant visual clarity (Too short, Fair, Good, Strong) and character counter.
 
+---
+
+## 12. Major Improvement Pass: Wizard Title Integration & Batch Taxonomies
+
+### 1. Step-1 Title Input in Creation Stepper
+- In `LinkCreateForm`, Step 1 incorporates an explicit Title field with character limit indicator (`0 / 255`), trimming rules, and clean neo-brutalist styling matching the URL input.
+- Displays an instant monospace short URL preview chip directly beneath alias entry.
+
+### 2. Multi-Tenant Batch Taxonomies in Bulk Import
+- The Bulk Import interface (`/import`) integrates optional Campaign and Tag selectors matching individual link creation options, styling selection chips with `--border-thick` and tactile selection states.
+- Rejection of foreign or inaccessible IDs displays an informative error callout (`404 NOT_FOUND`) preserving user file preview.
+
 
 

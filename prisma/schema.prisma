@@ -62,7 +62,7 @@ model Link {
 
   @@index([code])
   @@index([userId])
-  @@index([userId, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
   @@index([userId, isActive])
   @@index([isActive])
   @@index([createdAt])
@@ -87,7 +87,7 @@ model ClickEvent {
   @@index([linkId])
   @@index([timestamp])
   @@index([linkId, visitorHash])
-  @@index([linkId, timestamp])
+  @@index([linkId, timestamp(sort: Desc)], map: "ClickEvent_linkId_timestamp_desc_idx")
   @@index([linkId, source])
   @@index([source])
   @@index([device])

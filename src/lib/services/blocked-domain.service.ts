@@ -64,13 +64,23 @@ export function getCandidateDomains(hostname: string): string[] {
 }
 
 /**
- * In-memory cache of blocked domains for ultra-fast redirect path checks.
- * Eliminates round-trips to remote Neon PostgreSQL on every redirect.
+ * In-memory cache of blocked domains for high-throughput redirect checks.
+ * Bounded by a short 5-second TTL to ensure safe multi-instance and serverless convergence.
  */
 let cachedDomainsMap: Map<string, string | null> | null = null;
 let lastCacheFetchTime = 0;
-const CACHE_TTL_MS =
-  process.env.NODE_ENV === "test" || process.env.VITEST ? 0 : 30_000; // 30s in prod/dev, 0 in tests
+let timeProvider: () => number = () => Date.now();
+let overrideTtlMs: number | null = null;
+
+export const DEFAULT_BLOCKED_DOMAIN_CACHE_TTL_MS = 5_000; // 5 seconds default
+
+export function setClockForTesting(fn?: (() => number) | null): void {
+  timeProvider = fn || (() => Date.now());
+}
+
+export function setCacheTtlForTesting(ttlMs?: number | null): void {
+  overrideTtlMs = ttlMs ?? null;
+}
 
 export function invalidateBlockedDomainCache(): void {
   cachedDomainsMap = null;
@@ -78,8 +88,13 @@ export function invalidateBlockedDomainCache(): void {
 }
 
 async function getOrLoadBlockedDomainsMap(): Promise<Map<string, string | null>> {
-  const now = Date.now();
-  if (CACHE_TTL_MS > 0 && cachedDomainsMap && now - lastCacheFetchTime < CACHE_TTL_MS) {
+  const effectiveTtl =
+    overrideTtlMs !== null
+      ? overrideTtlMs
+      : (process.env.NODE_ENV === "test" || process.env.VITEST ? 0 : DEFAULT_BLOCKED_DOMAIN_CACHE_TTL_MS);
+
+  const now = timeProvider();
+  if (effectiveTtl > 0 && cachedDomainsMap && now - lastCacheFetchTime < effectiveTtl) {
     return cachedDomainsMap;
   }
 

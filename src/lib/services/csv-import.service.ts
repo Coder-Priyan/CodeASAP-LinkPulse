@@ -310,7 +310,7 @@ export async function executeCsvImport(
       select: { id: true, userId: true },
     });
     if (!campaign || campaign.userId !== userId) {
-      throw new LinkServiceError("Campaign does not exist or access denied.", "FORBIDDEN", 403);
+      throw new LinkServiceError("Campaign does not exist or access denied.", "NOT_FOUND", 404);
     }
   }
 
@@ -325,7 +325,7 @@ export async function executeCsvImport(
       select: { id: true },
     });
     if (userTags.length !== uniqueTagIds.length) {
-      throw new LinkServiceError("One or more tags do not exist or access denied.", "FORBIDDEN", 403);
+      throw new LinkServiceError("One or more tags do not exist or access denied.", "NOT_FOUND", 404);
     }
   }
 
