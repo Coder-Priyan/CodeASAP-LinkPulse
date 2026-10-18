@@ -151,6 +151,18 @@ export default function DashboardPage() {
     }
   };
 
+  const handleOptimisticLinkCreated = (tempLink: LinkItem) => {
+    setLinks((prev) => [tempLink, ...prev]);
+  };
+
+  const handleLinkReconciled = (tempId: string, realLink: LinkItem) => {
+    setLinks((prev) => prev.map((l) => (l.id === tempId ? realLink : l)));
+  };
+
+  const handleLinkRollback = (tempId: string) => {
+    setLinks((prev) => prev.filter((l) => l.id !== tempId));
+  };
+
   const handleCampaignCreated = (newCamp: { id: string; name: string }) => {
     setCampaigns((prev) => [newCamp, ...prev.filter((c) => c.id !== newCamp.id)]);
   };
@@ -305,6 +317,9 @@ export default function DashboardPage() {
       {/* Two-Step Shorten Form */}
       <LinkCreateForm
         onSuccess={handleLinkCreated}
+        onOptimisticCreate={handleOptimisticLinkCreated}
+        onReconcile={handleLinkReconciled}
+        onRollback={handleLinkRollback}
         campaigns={campaigns}
         tags={tags}
         onCampaignCreated={handleCampaignCreated}

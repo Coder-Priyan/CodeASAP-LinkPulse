@@ -24,6 +24,9 @@ import { LinkItem } from "./LinksTable";
 
 interface LinkCreateFormProps {
   onSuccess: (newLink?: LinkItem) => void;
+  onOptimisticCreate?: (tempLink: LinkItem) => void;
+  onReconcile?: (tempId: string, realLink: LinkItem) => void;
+  onRollback?: (tempId: string) => void;
   campaigns?: CampaignOption[];
   tags?: TagOption[];
   onCampaignCreated?: (campaign: CampaignOption) => void;
@@ -74,6 +77,9 @@ const RESERVED_SLUGS = new Set([
 
 export function LinkCreateForm({
   onSuccess,
+  onOptimisticCreate,
+  onReconcile,
+  onRollback,
   campaigns: propCampaigns,
   tags: propTags,
   onCampaignCreated,
@@ -273,6 +279,30 @@ export function LinkCreateForm({
       return;
     }
 
+    const tempId = `temp-${Date.now()}`;
+    const pendingAlias = customAlias.trim() || `pulse-${Math.random().toString(36).substring(2, 8)}`;
+    const optimisticItem: LinkItem = {
+      id: tempId,
+      code: pendingAlias,
+      destinationUrl: destinationUrl.trim(),
+      title: title.trim() || null,
+      isActive: true,
+      state: "active",
+      disabledReason: null,
+      expiresAt: expiresAt || null,
+      clickLimit: clickLimit ? parseInt(clickLimit, 10) : null,
+      clicksCount: 0,
+      qrScansCount: 0,
+      uniqueVisitorsCount: 0,
+      createdAt: new Date().toISOString(),
+      campaign: campaigns.find((c) => c.id === campaignId) || null,
+      tags: tags.filter((t) => selectedTagIds.includes(t.id)),
+      hasPassword: Boolean(password && password.trim().length > 0),
+    };
+
+    // 1. Optimistic immediate display in table
+    onOptimisticCreate?.(optimisticItem);
+
     setLoading(true);
 
     try {
@@ -323,7 +353,14 @@ export function LinkCreateForm({
         hasPassword: Boolean(password && password.trim().length > 0),
       };
 
-      // Reset form
+      // 2. Reconcile temporary row with verified server response
+      if (onReconcile) {
+        onReconcile(tempId, createdItem);
+      } else {
+        onSuccess(createdItem);
+      }
+
+      // 3. Reset form only on successful creation
       setTitle("");
       setDestinationUrl("");
       setCustomAlias("");
@@ -333,8 +370,11 @@ export function LinkCreateForm({
       setCampaignId("");
       setSelectedTagIds([]);
       setStep(1);
-      onSuccess(createdItem);
     } catch (err: unknown) {
+      // 4. Rollback: remove optimistic temporary row
+      onRollback?.(tempId);
+
+      // Keep user input completely intact in form fields!
       if (err instanceof Error) {
         setError(err.message);
       } else {

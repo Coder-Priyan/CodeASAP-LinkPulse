@@ -31,6 +31,12 @@ export interface CreateLinkInput {
   destinationUrl: string;
   customAlias?: string;
   userId: string;
+  user?: {
+    id: string;
+    email: string;
+    name?: string | null;
+    role: Role;
+  };
   expiresAt?: Date | string | null;
   clickLimit?: number | null;
   password?: string | null;
@@ -307,8 +313,8 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     isDomainBlocked(cleanUrl),
     db.link.findUnique({ where: { code: candidateCode }, select: { id: true } }),
     password && password.trim().length > 0 ? bcrypt.hash(password, 12) : Promise.resolve(null),
-    campaignId ? db.campaign.findUnique({ where: { id: campaignId }, select: { id: true, userId: true } }) : Promise.resolve(null),
-    uniqueTagIds.length > 0 ? db.tag.findMany({ where: { id: { in: uniqueTagIds }, userId }, select: { id: true } }) : Promise.resolve([]),
+    campaignId ? db.campaign.findUnique({ where: { id: campaignId }, select: { id: true, name: true, userId: true } }) : Promise.resolve(null),
+    uniqueTagIds.length > 0 ? db.tag.findMany({ where: { id: { in: uniqueTagIds }, userId }, select: { id: true, name: true, color: true } }) : Promise.resolve([]),
   ]);
 
   if (blockCheck.isBlocked) {
@@ -354,7 +360,7 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     }
   }
 
-  // 4. Create the link entity with relations
+  // 4. Create the link entity with pruned select (avoids Prisma multi-statement SELECT waterfalls)
   const link = await db.link.create({
     data: {
       code: finalCode,
@@ -371,20 +377,19 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
         create: uniqueTagIds.map((tagId) => ({ tagId })),
       } : undefined,
     },
-    include: {
-      user: {
-        select: { id: true, email: true, name: true, role: true },
-      },
-      campaign: {
-        select: { id: true, name: true },
-      },
-      tags: {
-        select: {
-          tag: {
-            select: { id: true, name: true, color: true },
-          },
-        },
-      },
+    select: {
+      id: true,
+      code: true,
+      destinationUrl: true,
+      title: true,
+      isActive: true,
+      disabledReason: true,
+      expiresAt: true,
+      clickLimit: true,
+      passwordHash: true,
+      campaignId: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
 
@@ -394,6 +399,25 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     clickLimit: link.clickLimit,
     clicksCount: 0,
   });
+
+  const campaignSummary: CampaignSummary | null = campResult
+    ? { id: campResult.id, name: campResult.name }
+    : null;
+
+  const tagSummaries: TagSummary[] = userTags.map((t) => ({
+    id: t.id,
+    name: t.name,
+    color: t.color,
+  }));
+
+  const userSummary = input.user
+    ? {
+        id: input.user.id,
+        email: input.user.email,
+        name: input.user.name ?? null,
+        role: input.user.role,
+      }
+    : undefined;
 
   return {
     id: link.id,
@@ -406,15 +430,15 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     clickLimit: link.clickLimit,
     hasPassword: Boolean(link.passwordHash),
     campaignId: link.campaignId,
-    campaign: link.campaign,
-    tags: link.tags.map((t) => t.tag),
+    campaign: campaignSummary,
+    tags: tagSummaries,
     createdAt: link.createdAt,
     updatedAt: link.updatedAt,
     clicksCount: 0,
     uniqueVisitorsCount: 0,
     qrScansCount: 0,
     state,
-    user: link.user,
+    user: userSummary,
   };
 }
 

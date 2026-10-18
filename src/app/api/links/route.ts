@@ -28,9 +28,16 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (parsed > 100) {
+      const isAdminScope = scope === "all" && user.role === Role.ADMIN;
+      if (parsed > 100 && !isAdminScope) {
         return NextResponse.json(
           { error: "Query parameter 'limit' cannot exceed maximum cap of 100." },
+          { status: 400 }
+        );
+      }
+      if (parsed > 10000 && isAdminScope) {
+        return NextResponse.json(
+          { error: "Query parameter 'limit' cannot exceed maximum cap of 10000." },
           { status: 400 }
         );
       }
@@ -86,6 +93,12 @@ export async function POST(request: NextRequest) {
       destinationUrl,
       customAlias: customAlias ? String(customAlias) : undefined,
       userId: user.userId,
+      user: {
+        id: user.userId,
+        email: user.email,
+        name: (user as any).name ?? null,
+        role: user.role,
+      },
       expiresAt: expiresAt || null,
       clickLimit: clickLimit !== undefined && clickLimit !== null && clickLimit !== "" ? Number(clickLimit) : null,
       password: password ? String(password) : null,

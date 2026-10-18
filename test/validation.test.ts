@@ -196,6 +196,30 @@ describe("4. URL and Alias Validation", () => {
       const data = await res.json();
       expect(Array.isArray(data.links)).toBe(true);
     });
+
+    it("allows admin scope=all to query links without 100-cap truncation or with higher limit", async () => {
+      // Temporarily switch mock user to ADMIN
+      const prevMock = mockUser;
+      mockUser = { userId: testUserId, role: Role.ADMIN, email: "admin@linkpulse.test" };
+
+      try {
+        // 1. Calling /api/links?scope=all without limit should return 200 without truncating
+        const reqAll = new NextRequest("http://localhost:3000/api/links?scope=all");
+        const resAll = await getLinksHandler(reqAll);
+        expect(resAll.status).toBe(200);
+        const dataAll = await resAll.json();
+        expect(Array.isArray(dataAll.links)).toBe(true);
+
+        // 2. Calling /api/links?scope=all&limit=250 should succeed for admin (not rejected with 400)
+        const reqCustom = new NextRequest("http://localhost:3000/api/links?scope=all&limit=250");
+        const resCustom = await getLinksHandler(reqCustom);
+        expect(resCustom.status).toBe(200);
+        const dataCustom = await resCustom.json();
+        expect(Array.isArray(dataCustom.links)).toBe(true);
+      } finally {
+        mockUser = prevMock;
+      }
+    });
   });
 
   describe("Privacy & PasswordHash Sanitization", () => {

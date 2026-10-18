@@ -104,6 +104,7 @@ async function runRealServerProfiling() {
         destinationUrl: "https://safe-profiling-target-alpha-99.org/page",
         customAlias: testAlias,
         userId: admin.id,
+        user: { id: admin.id, email: admin.email, name: admin.name, role: admin.role },
         clickLimit: 1000,
       });
     });

@@ -5,15 +5,32 @@ import { Role } from "@prisma/client";
 import { signSession } from "@/lib/auth/session";
 
 describe("Navbar Auth-Change Reactivity & Inline Tag/Campaign Sync", () => {
-  let browser: Browser;
-  let page: Page;
-  let testUser: { id: string; email: string; name: string };
+  let browser: Browser | null = null;
+  let page: Page | null = null;
+  let testUser: { id: string; email: string; name: string } | null = null;
+  let serverAvailable = false;
   const createdLinkIds: string[] = [];
   const createdCampaignIds: string[] = [];
   const createdTagIds: string[] = [];
   const createdUserIds: string[] = [];
 
   beforeAll(async () => {
+    try {
+      const res = await fetch("http://localhost:3000/api/health", {
+        signal: AbortSignal.timeout(1500),
+      });
+      serverAvailable = res.status < 500;
+    } catch {
+      serverAvailable = false;
+    }
+
+    if (!serverAvailable) {
+      console.warn(
+        "\n[NOTICE] No running server detected on http://localhost:3000. Skipping Playwright navbar E2E tests cleanly.\n"
+      );
+      return;
+    }
+
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext();
     page = await context.newPage();
@@ -32,9 +49,13 @@ describe("Navbar Auth-Change Reactivity & Inline Tag/Campaign Sync", () => {
   });
 
   afterAll(async () => {
-    await browser?.close();
+    if (browser) {
+      await browser.close();
+    }
 
     if (createdLinkIds.length > 0) {
+      await db.clickEvent.deleteMany({ where: { linkId: { in: createdLinkIds } } });
+      await db.linkTag.deleteMany({ where: { linkId: { in: createdLinkIds } } });
       await db.link.deleteMany({ where: { id: { in: createdLinkIds } } });
     }
     if (createdCampaignIds.length > 0) {
@@ -48,7 +69,12 @@ describe("Navbar Auth-Change Reactivity & Inline Tag/Campaign Sync", () => {
     }
   });
 
-  it("reacts dynamically to window auth-change events for login and logout", async () => {
+  it("reacts dynamically to window auth-change events for login and logout", async (ctx) => {
+    if (!serverAvailable || !page || !testUser) {
+      ctx.skip();
+      return;
+    }
+
     // 1. Visit homepage unauthenticated
     await page.goto("http://localhost:3000/");
     await page.waitForLoadState("networkidle");
@@ -100,7 +126,11 @@ describe("Navbar Auth-Change Reactivity & Inline Tag/Campaign Sync", () => {
   it(
     "synchronizes newly created campaign and tag inline into form state and selection",
     { timeout: 40000 },
-    async () => {
+    async (ctx) => {
+      if (!serverAvailable || !page || !testUser) {
+        ctx.skip();
+        return;
+      }
       // Authenticate user
       const token = await signSession({
         userId: testUser.id,
