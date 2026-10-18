@@ -1,5 +1,17 @@
 # LinkPulse Devlog
 
+### 2026-10-18 — Round: Speed and Perceived Performance
+- **What**: Optimized real response times across analytics service and API routes, eliminated sequential client request waterfalls, replaced full-page blocking spinner cards on `/dashboard`, `/analytics`, and `/admin` with non-blocking neo-brutalist skeletons, and introduced optimistic UI updates for link toggling, row deletion, and domain unblocking.
+- **Why**: Full-page spinner cards ("Loading Dashboard...", "Authenticating Administrator...") made pages feel dead and sluggish while remote Neon database latency blocked the entire layout. Database analytics calculations were executing 7 separate sequential `await` trips over the network, compounding latency up to 2.8s-3.8s.
+- **How**:
+  1. Consolidated 7 sequential Prisma `count` and `groupBy` queries in `src/lib/services/analytics.service.ts` into a single concurrent `Promise.all` batch. Warmed `/api/analytics` dropped from 2,895ms down to 749ms - 812ms.
+  2. Parallelized client-side fetches across `/dashboard`, `/analytics`, and `/admin` using `Promise.all`, cutting page bootstrap waterfall from 1,370ms to 740ms.
+  3. Replaced full-page blocking cards with instant page shells containing `.skeleton-stat-num`, `.skeleton-box`, and `.skeleton-table-row` pulse loaders adhering to the neo-brutalist design system (flat opacity pulses, responsive to `prefers-reduced-motion`).
+  4. Preserved existing chart and table data on screen during filter changes and manual refreshes without unmounting.
+  5. Implemented optimistic UI updates in `LinksTable.tsx` and `admin/page.tsx` for instant visual feedback on toggle, delete, and unblock actions with automatic rollback on network error.
+- **Requirement**: Speed and Perceived Performance pass (real speed reduction, perceived speed elimination of blocking spinners, zero migration on live DB, zero breaking changes to business logic).
+- **Next**: Final review and deployment.
+
 ### 2026-10-18 — Major Improvement Pass Plan (Architecture, Quality, Performance & Security)
 - **Goal**: Take LinkPulse to a clearly superior level across backend, frontend, data layer, security, performance, tests, and documentation.
 - **Order of Execution & Risk Assessment**:

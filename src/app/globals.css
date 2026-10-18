@@ -1933,3 +1933,58 @@ a {
   transform: translateY(-1px);
 }
 
+/* ==========================================================================
+   Perceived Speed: Neo-Brutalist Skeletons & Non-Blocking Layouts
+   ========================================================================== */
+
+.skeleton-box {
+  background-color: var(--color-ink-faint);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  animation: neoSkeletonPulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-text {
+  height: 1rem;
+  background-color: var(--color-ink-faint);
+  border-radius: var(--radius-sm);
+  animation: neoSkeletonPulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-stat-num {
+  height: 2.25rem;
+  width: 90px;
+  background-color: var(--color-ink-faint);
+  border-radius: var(--radius-sm);
+  animation: neoSkeletonPulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-table-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1.5px solid var(--color-ink-faint);
+  background-color: var(--color-white);
+}
+
+@keyframes neoSkeletonPulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-box,
+  .skeleton-text,
+  .skeleton-stat-num,
+  .skeleton-table-row {
+    animation: none;
+    opacity: 0.65;
+  }
+}
+
+

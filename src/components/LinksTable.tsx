@@ -58,9 +58,11 @@ interface LinksTableProps {
   links: LinkItem[];
   isAdminView?: boolean;
   onRefresh: () => void;
+  loading?: boolean;
 }
 
-export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTableProps) {
+export function LinksTable({ links, isAdminView = false, onRefresh, loading = false }: LinksTableProps) {
+  const [displayLinks, setDisplayLinks] = useState<LinkItem[]>(links);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
@@ -70,6 +72,11 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync prop changes into displayLinks while preserving optimistic updates
+  useEffect(() => {
+    setDisplayLinks(links);
+  }, [links]);
 
   // Keyboard shortcut listener: press Ctrl+K / Cmd+K or '/' to focus search, Esc to clear
   useEffect(() => {
@@ -135,9 +142,20 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
   };
 
   const handleToggleStatus = async (link: LinkItem) => {
+    const originalStatus = link.isActive;
+    const newStatus = !originalStatus;
+    const originalState = link.state;
+    const newState = newStatus ? "active" : "disabled";
+
+    // 1. Optimistic immediate update (0ms perceived latency)
+    setDisplayLinks((prev) =>
+      prev.map((l) =>
+        l.id === link.id ? { ...l, isActive: newStatus, state: newState } : l
+      )
+    );
     setActionLoadingId(link.id);
+
     try {
-      const newStatus = !link.isActive;
       const res = await fetch(`/api/links/${link.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -149,11 +167,24 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
 
       if (!res.ok) {
         const data = await res.json();
+        // Rollback on failure
+        setDisplayLinks((prev) =>
+          prev.map((l) =>
+            l.id === link.id ? { ...l, isActive: originalStatus, state: originalState } : l
+          )
+        );
         alert(data.error || "Failed to update link status");
       } else {
+        showToast(`Route /${link.code} is now ${newStatus ? "active" : "disabled"}.`);
         onRefresh();
       }
     } catch {
+      // Rollback on network error
+      setDisplayLinks((prev) =>
+        prev.map((l) =>
+          l.id === link.id ? { ...l, isActive: originalStatus, state: originalState } : l
+        )
+      );
       alert("Error connecting to server.");
     } finally {
       setActionLoadingId(null);
@@ -165,7 +196,13 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
       return;
     }
 
+    const itemToDelete = displayLinks.find((l) => l.id === linkId);
+    if (!itemToDelete) return;
+
+    // 1. Optimistic immediate removal (0ms perceived latency)
+    setDisplayLinks((prev) => prev.filter((l) => l.id !== linkId));
     setActionLoadingId(linkId);
+
     try {
       const res = await fetch(`/api/links/${linkId}`, {
         method: "DELETE",
@@ -173,11 +210,16 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
 
       if (!res.ok) {
         const data = await res.json();
+        // Rollback on failure
+        setDisplayLinks((prev) => [itemToDelete, ...prev]);
         alert(data.error || "Failed to delete link.");
       } else {
+        showToast("Link successfully deleted.");
         onRefresh();
       }
     } catch {
+      // Rollback on network error
+      setDisplayLinks((prev) => [itemToDelete, ...prev]);
       alert("Error connecting to server.");
     } finally {
       setActionLoadingId(null);
@@ -223,8 +265,8 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
     }
   };
 
-  // Filter links client-side for instant keyboard search
-  const filteredLinks = links.filter((link) => {
+  // Filter links client-side for instant keyboard search using displayLinks (reflects optimistic updates)
+  const filteredLinks = displayLinks.filter((link) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     const matchCode = link.code.toLowerCase().includes(q);
@@ -235,7 +277,27 @@ export function LinksTable({ links, isAdminView = false, onRefresh }: LinksTable
     return matchCode || matchDest || matchTitle || matchTag || matchCampaign;
   });
 
-  if (links.length === 0) {
+  if (loading) {
+    return (
+      <div className="card" style={{ padding: 0, overflow: "hidden", backgroundColor: "var(--color-white)" }}>
+        <div className="sr-only" aria-live="polite">Loading links...</div>
+        <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1.5px solid var(--color-ink-faint)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="skeleton-box" style={{ width: "160px", height: "1.5rem" }} />
+          <div className="skeleton-box" style={{ width: "220px", height: "2.25rem" }} />
+        </div>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="skeleton-table-row">
+            <div className="skeleton-box" style={{ width: "120px", height: "1.75rem" }} />
+            <div className="skeleton-box" style={{ width: "35%", height: "1.25rem" }} />
+            <div className="skeleton-box" style={{ width: "80px", height: "1.5rem" }} />
+            <div className="skeleton-box" style={{ width: "140px", height: "1.5rem", marginLeft: "auto" }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (displayLinks.length === 0) {
     return (
       <div className="card" style={{ padding: "3rem 2rem", textAlign: "center", backgroundColor: "var(--color-white)" }}>
         <div style={{ display: "inline-flex", justifyContent: "center", marginBottom: "1.25rem" }}>

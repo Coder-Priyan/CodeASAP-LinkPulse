@@ -155,40 +155,32 @@ export default function AdminPage() {
       return;
     }
 
+    const itemToDelete = blockedDomains.find((d) => d.id === id);
+    if (!itemToDelete) return;
+
+    // Optimistic immediate removal from list (0ms perceived latency)
+    setBlockedDomains((prev) => prev.filter((d) => d.id !== id));
     setDeletingId(id);
+
     try {
       const res = await fetch(`/api/admin/blocked-domains/${id}`, {
         method: "DELETE",
       });
 
       if (!res.ok) {
+        // Rollback on failure
+        setBlockedDomains((prev) => [itemToDelete, ...prev]);
         const data = await res.json();
         alert(data.error || "Failed to remove domain from blocklist.");
-      } else {
-        await fetchAdminData();
       }
     } catch {
+      // Rollback on network error
+      setBlockedDomains((prev) => [itemToDelete, ...prev]);
       alert("Network error while removing blocked domain.");
     } finally {
       setDeletingId(null);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="container container-wide" style={{ paddingTop: "5rem", textAlign: "center" }}>
-        <div className="card" style={{ maxWidth: "480px", margin: "0 auto", padding: "2.5rem 1.5rem" }}>
-          <RefreshCw size={28} className="spin" style={{ color: "var(--color-blue)", margin: "0 auto 1rem" }} />
-          <h2 style={{ fontSize: "1.2rem", fontWeight: 800, marginBottom: "0.4rem", fontFamily: "var(--font-display)" }}>
-            Authenticating Administrator
-          </h2>
-          <p style={{ color: "var(--color-ink-muted)", fontSize: "0.95rem" }}>
-            Verifying permissions and loading links...
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   if (forbidden) {
     return (
@@ -232,6 +224,7 @@ export default function AdminPage() {
 
   return (
     <div className="container container-wide" style={{ paddingTop: "2rem", paddingBottom: "4rem" }}>
+      {loading && <div className="sr-only" aria-live="polite">Loading administrator metrics and links...</div>}
       {/* Top Header */}
       <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem", marginBottom: "2rem" }}>
         <div>
@@ -275,7 +268,7 @@ export default function AdminPage() {
               <Globe size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{totalLinks}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalLinks}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Across all accounts
           </span>
@@ -288,7 +281,7 @@ export default function AdminPage() {
               <MousePointerClick size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{totalClicks}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalClicks.toLocaleString()}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Total platform redirects
           </span>
@@ -301,7 +294,7 @@ export default function AdminPage() {
               <Ban size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{blockedDomains.length}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : blockedDomains.length}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Active security filters
           </span>
@@ -319,7 +312,7 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="stat-value" style={{ fontSize: "1.75rem", marginTop: "0.4rem" }}>
-            <span>{activeLinks} Active</span>
+            {loading ? <div className="skeleton-stat-num" /> : <span>{activeLinks} Active</span>}
           </div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             {inactiveOrRestricted > 0 ? `${inactiveOrRestricted} off or restricted` : "All operational"}
@@ -513,7 +506,7 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <LinksTable links={links} isAdminView={true} onRefresh={fetchAdminData} />
+        <LinksTable links={links} isAdminView={true} onRefresh={fetchAdminData} loading={loading} />
       </div>
     </div>
   );

@@ -54,30 +54,36 @@ export default function AnalyticsPage() {
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      // 1. Auth check
-      const meRes = await fetch("/api/auth/me");
-      const meData = await meRes.json();
+      const params = new URLSearchParams();
+      params.set("period", period);
+      if (campaignId) params.set("campaignId", campaignId);
+      if (scope === "all") params.set("scope", "all");
+
+      // Concurrent fetch across auth session, campaigns, and analytics in a single network round
+      const [meRes, campRes, analyticsRes] = await Promise.all([
+        fetch("/api/auth/me"),
+        fetch("/api/campaigns"),
+        fetch(`/api/analytics?${params.toString()}`),
+      ]);
+
+      if (meRes.status === 401) {
+        router.push("/login");
+        return;
+      }
+
+      const [meData, campData, analyticsData] = await Promise.all([
+        meRes.json(),
+        campRes.json(),
+        analyticsRes.json(),
+      ]);
+
       if (!meData.user) {
         router.push("/login");
         return;
       }
+
       setUser(meData.user);
-
-      // 2. Fetch available campaigns for dropdown filter
-      const campRes = await fetch("/api/campaigns");
-      const campData = await campRes.json();
       setCampaigns(campData.campaigns || []);
-
-      // 3. Fetch analytics report
-      const params = new URLSearchParams();
-      params.set("period", period);
-      if (campaignId) params.set("campaignId", campaignId);
-      if (scope === "all" && meData.user.role === "ADMIN") {
-        params.set("scope", "all");
-      }
-
-      const analyticsRes = await fetch(`/api/analytics?${params.toString()}`);
-      const analyticsData = await analyticsRes.json();
       setReport(analyticsData.report || null);
     } catch (err) {
       console.error("Failed to load analytics:", err);
@@ -143,28 +149,12 @@ export default function AnalyticsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="container container-wide" style={{ paddingTop: "5rem", textAlign: "center" }}>
-        <div className="card" style={{ maxWidth: "480px", margin: "0 auto", padding: "2.5rem 1.5rem" }}>
-          <RefreshCw size={28} className="spin" style={{ color: "var(--color-blue)", margin: "0 auto 1rem" }} />
-          <h2 style={{ fontSize: "1.2rem", fontWeight: 800, marginBottom: "0.4rem", fontFamily: "var(--font-display)" }}>
-            Loading Analytics
-          </h2>
-          <p style={{ color: "var(--color-ink-muted)", fontSize: "0.95rem" }}>
-            Aggregating performance metrics and visit events...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const maxClickInSeries = report?.clicksOverTime?.reduce(
     (max, item) => Math.max(max, item.clicks),
     0
   ) || 1;
 
-  const hasAnyData = (report?.metrics.totalClicks ?? 0) > 0 || (report?.metrics.totalLinks ?? 0) > 0;
+  const hasAnyData = loading || (report?.metrics.totalClicks ?? 0) > 0 || (report?.metrics.totalLinks ?? 0) > 0;
 
   return (
     <div className="container container-wide" style={{ paddingTop: "2.5rem", paddingBottom: "4rem" }}>
@@ -350,7 +340,7 @@ export default function AnalyticsPage() {
               <MousePointerClick size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{report?.metrics.totalClicks ?? 0}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.totalClicks ?? 0).toLocaleString()}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Human visits ({period.toUpperCase()})
           </span>
@@ -363,7 +353,7 @@ export default function AnalyticsPage() {
               <Users size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{report?.metrics.uniqueVisitors ?? 0}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.uniqueVisitors ?? 0).toLocaleString()}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Different visitors
           </span>
@@ -376,7 +366,7 @@ export default function AnalyticsPage() {
               <CheckCircle size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{report?.metrics.activeLinks ?? 0}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.activeLinks ?? 0)}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Out of {report?.metrics.totalLinks ?? 0} total links
           </span>
@@ -389,7 +379,7 @@ export default function AnalyticsPage() {
               <QrCode size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{report?.metrics.qrScans ?? 0}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.metrics.qrScans ?? 0)}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             {report?.metrics.qrScans ?? 0} QR · {report?.metrics.directClicks ?? 0} direct
           </span>
@@ -402,7 +392,7 @@ export default function AnalyticsPage() {
               <Layers size={16} strokeWidth={2.5} style={{ color: "var(--color-ink)" }} />
             </div>
           </div>
-          <div className="stat-value">{report?.campaignPerformance.length ?? 0}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : (report?.campaignPerformance.length ?? 0)}</div>
           <span style={{ fontSize: "0.825rem", color: "var(--color-ink-muted)", marginTop: "0.35rem", display: "block", fontWeight: 600 }}>
             Configured campaigns
           </span>
@@ -427,7 +417,53 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        {report && report.clicksOverTime.length > 0 ? (
+        {loading ? (
+          <div style={{ overflowX: "auto", paddingBottom: "0.5rem" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: "0.6rem",
+                height: "200px",
+                paddingTop: "24px",
+                paddingBottom: "8px",
+                borderBottom: "2px solid var(--color-ink)",
+              }}
+            >
+              {[35, 65, 40, 85, 55, 70, 90].map((h, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    height: "100%",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <div
+                    className="skeleton-box"
+                    style={{
+                      width: "100%",
+                      maxWidth: "36px",
+                      height: `${h}%`,
+                      borderRadius: "4px 4px 0 0",
+                    }}
+                  />
+                  <div
+                    className="skeleton-box"
+                    style={{
+                      width: "28px",
+                      height: "12px",
+                      marginTop: "8px",
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : report && report.clicksOverTime.length > 0 ? (
           <div>
             {/* Accessible screen reader data table */}
             <div className="sr-only">

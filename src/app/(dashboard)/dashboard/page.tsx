@@ -56,8 +56,29 @@ export default function DashboardPage() {
 
   const fetchUserData = useCallback(async () => {
     try {
-      const meRes = await fetch("/api/auth/me");
-      const meData = await meRes.json();
+      const params = new URLSearchParams();
+      if (filterCampaignId) params.set("campaignId", filterCampaignId);
+      if (filterTagId) params.set("tagId", filterTagId);
+
+      // Fetch user profile, campaigns, tags, and links concurrently in a single parallel network round
+      const [meRes, campRes, tagRes, linksRes] = await Promise.all([
+        fetch("/api/auth/me"),
+        fetch("/api/campaigns"),
+        fetch("/api/tags"),
+        fetch(`/api/links?${params.toString()}`),
+      ]);
+
+      if (meRes.status === 401) {
+        router.push("/login");
+        return;
+      }
+
+      const [meData, campData, tagData, linksData] = await Promise.all([
+        meRes.json(),
+        campRes.json(),
+        tagRes.json(),
+        linksRes.json(),
+      ]);
 
       if (!meData.user) {
         router.push("/login");
@@ -65,26 +86,8 @@ export default function DashboardPage() {
       }
 
       setUser(meData.user);
-
-      // Fetch user campaigns & tags for filter dropdowns
-      const [campRes, tagRes] = await Promise.all([
-        fetch("/api/campaigns"),
-        fetch("/api/tags"),
-      ]);
-      const [campData, tagData] = await Promise.all([
-        campRes.json(),
-        tagRes.json(),
-      ]);
       setCampaigns(campData.campaigns || []);
       setTags(tagData.tags || []);
-
-      // Fetch filtered user links
-      const params = new URLSearchParams();
-      if (filterCampaignId) params.set("campaignId", filterCampaignId);
-      if (filterTagId) params.set("tagId", filterTagId);
-
-      const linksRes = await fetch(`/api/links?${params.toString()}`);
-      const linksData = await linksRes.json();
       setLinks(linksData.links || []);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
@@ -108,20 +111,6 @@ export default function DashboardPage() {
     setFilterTagId("");
   };
 
-  if (loading) {
-    return (
-      <div className="container" style={{ paddingTop: "5rem", paddingBottom: "5rem", textAlign: "center" }}>
-        <div className="card" style={{ maxWidth: "420px", margin: "0 auto", padding: "2.5rem" }}>
-          <RefreshCw size={28} className="spin" style={{ margin: "0 auto 1rem", color: "var(--color-blue)" }} />
-          <h2 style={{ fontSize: "1.35rem", marginBottom: "0.5rem" }}>Loading Dashboard</h2>
-          <p style={{ color: "var(--color-muted)", fontSize: "0.95rem" }}>
-            Fetching your links, campaigns, and stats...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const totalLinks = links.length;
   const totalClicks = links.reduce((acc, l) => acc + (l.clicksCount || 0), 0);
   const totalUniqueVisitors = links.reduce((acc, l) => acc + (l.uniqueVisitorsCount || 0), 0);
@@ -130,6 +119,7 @@ export default function DashboardPage() {
 
   return (
     <div className="container-wide" style={{ paddingTop: "2.5rem", paddingBottom: "4rem" }}>
+      {loading && <div className="sr-only" aria-live="polite">Loading dashboard links and metrics...</div>}
       {/* Header */}
       <div className="flex items-center justify-between" style={{ marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
         <div>
@@ -204,7 +194,7 @@ export default function DashboardPage() {
               <Link2 size={16} strokeWidth={2.5} />
             </div>
           </div>
-          <div className="stat-value">{totalLinks}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalLinks}</div>
         </div>
 
         <div className="stat-card stat-card-butter">
@@ -214,7 +204,7 @@ export default function DashboardPage() {
               <MousePointerClick size={16} strokeWidth={2.5} />
             </div>
           </div>
-          <div className="stat-value">{totalClicks}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalClicks.toLocaleString()}</div>
         </div>
 
         <div className="stat-card stat-card-sage">
@@ -224,7 +214,7 @@ export default function DashboardPage() {
               <Users size={16} strokeWidth={2.5} />
             </div>
           </div>
-          <div className="stat-value">{totalUniqueVisitors}</div>
+          <div className="stat-value">{loading ? <div className="skeleton-stat-num" /> : totalUniqueVisitors.toLocaleString()}</div>
         </div>
 
         <div className={`stat-card ${attentionLinks > 0 ? "stat-card-coral" : "stat-card-sage"}`}>
@@ -241,11 +231,17 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="stat-value" style={{ fontSize: "1.65rem", marginTop: "0.5rem" }}>
-            <span>{activeLinks} Active</span>
-            {attentionLinks > 0 && (
-              <span style={{ fontSize: "0.95rem", color: "var(--color-muted)", marginLeft: "0.5rem", fontFamily: "var(--font-sans-family)", fontWeight: 700 }}>
-                ({attentionLinks} off/limited)
-              </span>
+            {loading ? (
+              <div className="skeleton-stat-num" />
+            ) : (
+              <>
+                <span>{activeLinks} Active</span>
+                {attentionLinks > 0 && (
+                  <span style={{ fontSize: "0.95rem", color: "var(--color-muted)", marginLeft: "0.5rem", fontFamily: "var(--font-sans-family)", fontWeight: 700 }}>
+                    ({attentionLinks} off/limited)
+                  </span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -324,7 +320,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <LinksTable links={links} onRefresh={fetchUserData} />
+        <LinksTable links={links} onRefresh={fetchUserData} loading={loading} />
       </div>
     </div>
   );

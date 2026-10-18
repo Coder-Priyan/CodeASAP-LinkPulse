@@ -111,8 +111,23 @@ export async function getAnalyticsReport(
     clickWhere.timestamp = { gte: since };
   }
 
-  // 3. Query Key Metrics
-  const [totalLinks, activeLinksCount, totalClicks] = await Promise.all([
+  // 3. Concurrently fetch all independent telemetry and link collections in a single round
+  const campaignWhere: Prisma.CampaignWhereInput = isPlatformScope ? {} : { userId };
+
+  const [
+    totalLinks,
+    activeLinksCount,
+    totalClicks,
+    uniqueVisitorGroups,
+    clickTimestamps,
+    sourceRows,
+    deviceRows,
+    browserRows,
+    referrerRows,
+    linksInScope,
+    userCampaigns,
+    allUserLinks,
+  ] = await Promise.all([
     db.link.count({ where: linkWhere }),
     db.link.count({
       where: {
@@ -122,52 +137,18 @@ export async function getAnalyticsReport(
       },
     }),
     db.clickEvent.count({ where: clickWhere }),
-  ]);
-
-  // Unique visitors count in selected period
-  const uniqueVisitorGroups = await db.clickEvent.groupBy({
-    by: ["visitorHash"],
-    where: {
-      ...clickWhere,
-      visitorHash: { not: null },
-    },
-  });
-  const uniqueVisitors = uniqueVisitorGroups.length;
-
-  // 4. Query Clicks Over Time (generate daily sequence and map counts)
-  const clickTimestamps = await db.clickEvent.findMany({
-    where: clickWhere,
-    select: { timestamp: true },
-    orderBy: { timestamp: "asc" },
-  });
-
-  const dailyMap = new Map<string, number>();
-
-  // Initialize date range with zeros
-  const startDate = since || (clickTimestamps.length > 0 ? clickTimestamps[0].timestamp : new Date(now.getTime() - 7 * 86400000));
-  const daysDiff = Math.max(1, Math.min(60, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 3600 * 24))));
-
-  for (let i = daysDiff - 1; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 86400000);
-    const key = d.toISOString().slice(0, 10);
-    dailyMap.set(key, 0);
-  }
-
-  for (const c of clickTimestamps) {
-    const key = c.timestamp.toISOString().slice(0, 10);
-    if (dailyMap.has(key)) {
-      dailyMap.set(key, (dailyMap.get(key) || 0) + 1);
-    } else {
-      dailyMap.set(key, 1);
-    }
-  }
-
-  const clicksOverTime: DayClickStat[] = Array.from(dailyMap.entries()).map(
-    ([date, clicks]) => ({ date, clicks })
-  );
-
-  // 5. Categorical Breakdowns (Source, Device, Browser, Referrer)
-  const [sourceRows, deviceRows, browserRows, referrerRows] = await Promise.all([
+    db.clickEvent.groupBy({
+      by: ["visitorHash"],
+      where: {
+        ...clickWhere,
+        visitorHash: { not: null },
+      },
+    }),
+    db.clickEvent.findMany({
+      where: clickWhere,
+      select: { timestamp: true },
+      orderBy: { timestamp: "asc" },
+    }),
     db.clickEvent.groupBy({
       by: ["source"],
       where: clickWhere,
@@ -194,7 +175,70 @@ export async function getAnalyticsReport(
       orderBy: { _count: { id: "desc" } },
       take: 8,
     }),
+    db.link.findMany({
+      where: linkWhere,
+      select: {
+        id: true,
+        code: true,
+        destinationUrl: true,
+        clicksCount: true,
+      },
+      orderBy: { clicksCount: "desc" },
+      take: 5,
+    }),
+    db.campaign.findMany({
+      where: campaignWhere,
+      include: {
+        links: {
+          select: {
+            id: true,
+            code: true,
+            destinationUrl: true,
+            clicksCount: true,
+          },
+        },
+      },
+    }),
+    db.link.findMany({
+      where: linkWhere,
+      select: {
+        id: true,
+        code: true,
+        destinationUrl: true,
+        isActive: true,
+        expiresAt: true,
+        clickLimit: true,
+        clicksCount: true,
+        disabledReason: true,
+      },
+    }),
   ]);
+
+  const uniqueVisitors = uniqueVisitorGroups.length;
+
+  // 4. Map Clicks Over Time (generate daily sequence and map counts)
+  const dailyMap = new Map<string, number>();
+  const startDate = since || (clickTimestamps.length > 0 ? clickTimestamps[0].timestamp : new Date(now.getTime() - 7 * 86400000));
+  const daysDiff = Math.max(1, Math.min(60, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 3600 * 24))));
+
+  for (let i = daysDiff - 1; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 86400000);
+    const key = d.toISOString().slice(0, 10);
+    dailyMap.set(key, 0);
+  }
+
+  for (const c of clickTimestamps) {
+    const key = c.timestamp.toISOString().slice(0, 10);
+    if (dailyMap.has(key)) {
+      dailyMap.set(key, (dailyMap.get(key) || 0) + 1);
+    } else {
+      dailyMap.set(key, 1);
+    }
+  }
+
+  const clicksOverTime: DayClickStat[] = Array.from(dailyMap.entries()).map(
+    ([date, clicks]) => ({ date, clicks })
+  );
 
   let qrScans = 0;
   for (const s of sourceRows) {
@@ -234,23 +278,14 @@ export async function getAnalyticsReport(
   }));
 
   // 6. Top Performing Links
-  const linksInScope = await db.link.findMany({
-    where: linkWhere,
-    select: {
-      id: true,
-      code: true,
-      destinationUrl: true,
-      clicksCount: true,
-    },
-    orderBy: { clicksCount: "desc" },
-    take: 5,
-  });
-
   const topLinkIds = linksInScope.map((l) => l.id);
-  const topLinkUniques = await db.clickEvent.groupBy({
-    by: ["linkId", "visitorHash"],
-    where: { linkId: { in: topLinkIds }, visitorHash: { not: null } },
-  });
+  const topLinkUniques =
+    topLinkIds.length > 0
+      ? await db.clickEvent.groupBy({
+          by: ["linkId", "visitorHash"],
+          where: { linkId: { in: topLinkIds }, visitorHash: { not: null } },
+        })
+      : [];
 
   const topUniqueMap = new Map<string, number>();
   for (const row of topLinkUniques) {
@@ -266,21 +301,6 @@ export async function getAnalyticsReport(
   }));
 
   // 7. Campaign Performance
-  const campaignWhere: Prisma.CampaignWhereInput = isPlatformScope ? {} : { userId };
-  const userCampaigns = await db.campaign.findMany({
-    where: campaignWhere,
-    include: {
-      links: {
-        select: {
-          id: true,
-          code: true,
-          destinationUrl: true,
-          clicksCount: true,
-        },
-      },
-    },
-  });
-
   const campaignPerformance: CampaignPerformanceStat[] = userCampaigns.map((camp) => {
     const totalCampClicks = camp.links.reduce((acc, l) => acc + (l.clicksCount || 0), 0);
     const top = camp.links.length > 0
@@ -297,20 +317,6 @@ export async function getAnalyticsReport(
   });
 
   // 8. Link Alerts
-  const allUserLinks = await db.link.findMany({
-    where: linkWhere,
-    select: {
-      id: true,
-      code: true,
-      destinationUrl: true,
-      isActive: true,
-      expiresAt: true,
-      clickLimit: true,
-      clicksCount: true,
-      disabledReason: true,
-    },
-  });
-
   const alerts: LinkAlert[] = [];
   const seventyTwoHoursLater = new Date(now.getTime() + 72 * 3600 * 1000);
 
