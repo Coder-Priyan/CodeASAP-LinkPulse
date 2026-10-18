@@ -326,10 +326,10 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
             <div className="onboarding-item">
               <div className="flex items-center gap-2">
                 <span className="onboarding-num">3</span>
-                <strong style={{ fontSize: "0.95rem" }}>Inspect Telemetry</strong>
+                <strong style={{ fontSize: "0.95rem" }}>Numbers &amp; Stats</strong>
               </div>
               <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: 0 }}>
-                Analyze visits, unique human sessions, browsers, devices, and referrers in real time.
+                Track visits, unique guests, browsers, devices, and referrers in real time.
               </p>
             </div>
           </div>
@@ -474,7 +474,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                         type="button"
                         onClick={() => toggleRowExpand(link.id)}
                         className="btn btn-secondary btn-sm table-icon-btn"
-                        title={isExpanded ? "Collapse telemetry breakdown" : "Expand telemetry breakdown"}
+                        title={isExpanded ? "Collapse visit breakdown" : "Expand visit breakdown"}
                         aria-label={isExpanded ? `Collapse details for ${link.code}` : `Expand details for ${link.code}`}
                         aria-expanded={isExpanded}
                       >
@@ -566,7 +566,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
 
                     {/* Original Destination */}
                     <td>
-                      <div className="flex items-center gap-1.5" style={{ maxWidth: "260px" }}>
+                      <div className="flex items-center gap-1.5" style={{ maxWidth: "200px" }}>
                         <a
                           href={link.destinationUrl}
                           target="_blank"
@@ -574,9 +574,13 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                           className="truncate"
                           style={{
                             color: "var(--color-ink)",
-                            fontSize: "0.9rem",
+                            fontSize: "0.875rem",
                             fontWeight: 600,
-                            maxWidth: "235px",
+                            maxWidth: "180px",
+                            display: "inline-block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
                           }}
                           title={link.destinationUrl}
                         >
@@ -673,6 +677,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                           <span
                             className="tooltip-trigger"
                             tabIndex={0}
+                            title={`Expires: ${new Date(link.expiresAt).toLocaleString()}`}
                             aria-label={`Expires: ${new Date(link.expiresAt).toLocaleString()}`}
                             style={{ color: "var(--color-ink)", display: "inline-flex" }}
                           >
@@ -684,6 +689,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                           <span
                             className="tooltip-trigger"
                             tabIndex={0}
+                            title={`Limit: ${link.clicksCount}/${link.clickLimit} visits`}
                             aria-label={`Limit: ${link.clicksCount}/${link.clickLimit} visits`}
                             style={{ color: "var(--color-ink)", display: "inline-flex" }}
                           >
@@ -697,6 +703,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                           <span
                             className="tooltip-trigger"
                             tabIndex={0}
+                            title="Passcode protection enabled"
                             aria-label="Passcode protection enabled"
                             style={{ color: "var(--color-ink)", display: "inline-flex" }}
                           >
@@ -711,11 +718,11 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                     </td>
 
                     {/* State badge */}
-                    <td>
+                    <td style={{ whiteSpace: "nowrap" }}>
                       <div>
                         {renderStateBadge(link.state)}
                         {link.disabledReason && link.state === "disabled" && (
-                          <div style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.2rem" }}>
+                          <div style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.2rem", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis" }} title={link.disabledReason}>
                             {link.disabledReason}
                           </div>
                         )}
@@ -725,52 +732,49 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                     {/* Actions (Sticky Right) */}
                     <td className="col-sticky-actions" style={{ textAlign: "right" }}>
                       <div
-                        className="flex items-center justify-between"
-                        style={{ justifyContent: "flex-end", gap: "0.4rem" }}
+                        className="flex items-center justify-end"
+                        style={{ justifyContent: "flex-end", gap: "0.35rem" }}
                       >
                         <button
                           type="button"
                           onClick={() => setQrModalLink(link)}
                           disabled={isLoading}
-                          className="btn btn-secondary btn-sm"
+                          className="btn btn-secondary btn-sm table-action-btn"
                           title="View and download QR code"
-                          aria-label="View QR code"
+                          aria-label={`View QR code for /${link.code}`}
                         >
                           <QrCode size={14} />
-                          <span>QR</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setEditingLink(link)}
                           disabled={isLoading}
-                          className="btn btn-secondary btn-sm"
+                          className="btn btn-secondary btn-sm table-action-btn"
                           title="Edit link rules"
-                          aria-label="Edit link rules"
+                          aria-label={`Edit rules for /${link.code}`}
                         >
                           <Sliders size={14} />
-                          <span>Edit</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleToggleStatus(link)}
                           disabled={isLoading}
-                          className={`btn btn-sm ${link.isActive ? "btn-secondary" : "btn-primary"}`}
+                          className={`btn btn-sm table-action-btn ${link.isActive ? "btn-secondary" : "btn-primary"}`}
                           title={link.isActive ? "Deactivate link" : "Activate link"}
-                          aria-label={link.isActive ? "Deactivate link" : "Activate link"}
+                          aria-label={link.isActive ? `Deactivate /${link.code}` : `Activate /${link.code}`}
                         >
                           <Power size={14} />
-                          <span>{link.isActive ? "Disable" : "Enable"}</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleDelete(link.id)}
                           disabled={isLoading}
-                          className="btn btn-danger btn-sm"
+                          className="btn btn-danger btn-sm table-action-btn"
                           title="Permanently delete link"
-                          aria-label="Delete link"
+                          aria-label={`Delete /${link.code}`}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -800,7 +804,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
               <div
                 className="card"
                 style={{
-                  backgroundColor: "#FAF6ED",
+                  backgroundColor: "var(--color-paper)",
                   border: "var(--border-thick)",
                   padding: "1.25rem 1.5rem",
                   boxShadow: "var(--shadow-hard)",
@@ -815,7 +819,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                       Inspector: <strong>/{expLink.code}</strong>
                     </span>
                     <span style={{ fontSize: "0.85rem", color: "var(--color-muted)", fontWeight: 700 }}>
-                      Detailed telemetry breakdown and operational guardrails
+                      Visit details and link rules
                     </span>
                   </div>
                   <button

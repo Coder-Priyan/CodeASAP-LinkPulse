@@ -5,7 +5,7 @@ import { PulseMascot, MascotMood } from "@/components/PulseMascot";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Link Status",
+  title: "Link Status | LinkPulse",
 };
 
 interface PageProps {

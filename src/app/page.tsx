@@ -29,7 +29,7 @@ export default async function HomePage() {
         <div className="hero-companion-deck">
           <PulseMascot mood="happy" size={120} />
           <div className="mascot-speech-bubble">
-            Fast redirects. Clear click telemetry.
+            Fast redirects. Clear click numbers.
           </div>
         </div>
 
@@ -38,7 +38,7 @@ export default async function HomePage() {
         </h1>
 
         <p className="hero-desc">
-          Create short links with custom aliases, granular redirect rules, and instant click telemetry &mdash; recording visits, referrers, and devices without third-party ad networks or cookie banners.
+          Create short links with custom aliases, granular redirect rules, and instant click analytics &mdash; recording visits, referrers, and devices without third-party ad networks or cookie banners.
         </p>
 
         <div className="hero-actions">
@@ -178,7 +178,7 @@ export default async function HomePage() {
             <div className="step-badge">Step 3</div>
             <h3 className="step-title">Inspect Clicks</h3>
             <p className="step-desc">
-              Observe real-time click volume, unique visitors, browser types, and QR scan attribution in a clean telemetry cockpit.
+              Observe real-time click volume, unique visitors, browser types, and QR scan attribution in a clean analytics dashboard.
             </p>
           </div>
         </div>
@@ -212,7 +212,7 @@ export default async function HomePage() {
             </div>
             <h3 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>Tactile QR Engine</h3>
             <p style={{ color: "var(--color-muted)", fontSize: "0.95rem", lineHeight: 1.5, margin: 0 }}>
-              Download crisp, high-contrast QR codes in SVG or PNG formats. Each QR code is automatically tagged to isolate physical print scans from browser clicks in your telemetry cockpit.
+              Download crisp, high-contrast QR codes in SVG or PNG formats. Each QR code is automatically tagged to isolate physical print scans from browser clicks in your analytics dashboard.
             </p>
           </div>
 

@@ -326,15 +326,6 @@ export default function DashboardPage() {
         onTagCreated={handleTagCreated}
       />
 
-      {/* Desktop Keyboard Pro-Tip */}
-      {totalLinks > 0 && (
-        <div className="desktop-pro-tip">
-          <Sparkles size={16} style={{ color: "var(--color-blue)", flexShrink: 0 }} />
-          <span>
-            <strong>Desktop shortcut:</strong> Press <kbd className="kbd-shortcut">Ctrl+K</kbd> or <kbd className="kbd-shortcut">/</kbd> anywhere to search and filter links instantly by code, destination, or tag.
-          </span>
-        </div>
-      )}
 
       {/* Links List with Filters */}
       <div style={{ marginTop: "1rem" }}>

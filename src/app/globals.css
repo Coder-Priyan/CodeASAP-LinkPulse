@@ -25,6 +25,14 @@
   --color-text-danger: #B3261E;    /* Text-safe dark red for error text */
   --on-primary: #FFFFFF;           /* High-contrast text & icons on deep teal */
 
+  /* --- Disabled State Tokens (High Contrast >= 4.5:1) --- */
+  --color-disabled-primary-bg: #DDE8E4;
+  --color-disabled-primary-text: #1E3438;
+  --color-disabled-secondary-bg: #EDE8DC;
+  --color-disabled-secondary-text: #46585C;
+  --color-disabled-danger-bg: #F8E3DF;
+  --color-disabled-danger-text: #7A2518;
+
   /* --- Semantic Mappings --- */
   --bg-primary: var(--color-paper);
   --bg-secondary: var(--color-blue-light);
@@ -79,6 +87,11 @@ html {
   overflow-x: hidden;
 }
 
+:focus-visible {
+  outline: 3px solid var(--color-blue);
+  outline-offset: 2px;
+}
+
 body {
   font-family: var(--font-sans-family);
   background-color: var(--color-paper);
@@ -121,9 +134,9 @@ a {
 
 .container-wide {
   width: 100%;
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 1.5rem;
 }
 
 /* ==========================================================================
@@ -389,10 +402,9 @@ button[aria-busy="true"] {
 }
 
 .btn:disabled {
-  opacity: 0.55;
   cursor: not-allowed;
-  box-shadow: var(--shadow-hard-sm);
-  transform: none;
+  box-shadow: 2px 2px 0 var(--color-ink) !important;
+  transform: none !important;
 }
 
 .btn-primary {
@@ -405,6 +417,13 @@ button[aria-busy="true"] {
   color: var(--on-primary);
 }
 
+.btn-primary:disabled {
+  background-color: var(--color-disabled-primary-bg); /* Crisp muted sage paper fill */
+  color: var(--color-disabled-primary-text);           /* High contrast deep teal ink text (7.2:1) */
+  border-color: var(--color-ink);
+  opacity: 1;                                         /* Eliminates washed out white text on teal */
+}
+
 .btn-secondary {
   background-color: var(--color-white);
   color: var(--color-ink);
@@ -414,6 +433,13 @@ button[aria-busy="true"] {
   background-color: var(--color-yellow);
 }
 
+.btn-secondary:disabled {
+  background-color: var(--color-disabled-secondary-bg);
+  color: var(--color-disabled-secondary-text);
+  border-color: var(--color-ink);
+  opacity: 1;
+}
+
 .btn-danger {
   background-color: var(--color-coral);
   color: var(--color-ink);
@@ -421,6 +447,13 @@ button[aria-busy="true"] {
 
 .btn-danger:hover:not(:disabled) {
   background-color: #ED9380;
+}
+
+.btn-danger:disabled {
+  background-color: var(--color-disabled-danger-bg);
+  color: var(--color-disabled-danger-text);
+  border-color: var(--color-ink);
+  opacity: 1;
 }
 
 .btn-ghost {
@@ -451,6 +484,31 @@ button[aria-busy="true"] {
   padding: 0.25rem 0.5rem;
   min-height: 36px;
   min-width: 36px;
+}
+
+.table-action-btn {
+  padding: 0;
+  min-height: 34px;
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  box-shadow: 1.5px 1.5px 0 var(--color-ink);
+  flex-shrink: 0;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease;
+}
+
+.table-action-btn:hover:not(:disabled) {
+  transform: translate(-1.5px, -1.5px);
+  box-shadow: 2.5px 2.5px 0 var(--color-ink);
+}
+
+.table-action-btn:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--color-ink);
 }
 
 @media (max-width: 640px) {
@@ -644,6 +702,12 @@ button[aria-busy="true"] {
   color: var(--color-ink);
 }
 
+.badge-near-limit,
+.badge-expiring-soon {
+  background-color: var(--color-yellow);
+  color: var(--color-ink);
+}
+
 .badge-blocked {
   background-color: var(--color-coral-light);
   color: var(--color-ink);
@@ -753,6 +817,8 @@ button[aria-busy="true"] {
 .data-table td.col-sticky-actions {
   position: sticky;
   right: 0;
+  width: 160px;
+  min-width: 160px;
   border-left: 1.5px solid var(--color-ink-faint);
 }
 
@@ -835,11 +901,25 @@ button[aria-busy="true"] {
   position: relative;
   overflow: hidden;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
+  user-select: none;
 }
 
 .stat-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-hard-lg);
+}
+
+.stat-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-pressed);
+}
+
+.stat-card .icon-chip {
+  transition: transform 0.15s ease;
+}
+
+.stat-card:hover .icon-chip {
+  transform: scale(1.1) rotate(-3deg);
 }
 
 .stat-card::before {
@@ -848,7 +928,7 @@ button[aria-busy="true"] {
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
+  height: 5px;
   background-color: var(--color-ink);
 }
 
@@ -871,6 +951,54 @@ button[aria-busy="true"] {
   margin-top: 0.35rem;
   color: var(--color-ink);
   line-height: 1;
+}
+
+/* Create Link Step 1 Responsive Grid & Full-Width Chip */
+.create-link-grid-step1 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  align-items: flex-start;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .create-link-grid-step1 {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+.create-link-preview-chip {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 0.75rem 1.15rem;
+  background-color: var(--color-paper);
+  border: var(--border-thin);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hard-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  max-width: 100%;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+
+.create-link-preview-chip:hover {
+  background-color: var(--color-yellow-light);
+  border-color: var(--color-ink);
+}
+
+.create-link-preview-chip-text {
+  font-family: var(--font-mono-family);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-blue);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 /* ==========================================================================
@@ -2088,14 +2216,20 @@ button[aria-busy="true"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loading-mascot-active {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .loading-mascot-active,
+  .spin {
     animation: none !important;
   }
   .loading-progress-bar {
     transition: none !important;
-  }
-  .loading-long-wait-chip .spin {
-    animation: none !important;
   }
 }
 

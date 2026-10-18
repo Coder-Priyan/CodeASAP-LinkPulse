@@ -160,7 +160,7 @@ describe("6. Role-Based Access Control (RBAC) & Multi-Tenant Isolation", () => {
     expect(updated.disabledReason).toBe("Flagged for policy violation");
 
     // Disabled link rule evaluation
-    const evalResult = await evaluateLinkRules(updated);
+    const evalResult = await evaluateLinkRules({ ...updated, passwordHash: null });
     expect(evalResult.status).toBe("DISABLED");
     expect(evalResult.reason).toBe("Flagged for policy violation");
 

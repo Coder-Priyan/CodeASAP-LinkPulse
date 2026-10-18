@@ -7,11 +7,20 @@
  */
 
 export function getShortUrlBase(): string {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Outside production: use active window.location.origin so short URLs reflect the actual dev server port
+  if (!isProduction && typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/+$/, "");
+  }
+
+  // In production: prefer configured NEXT_PUBLIC_APP_URL
   const envBase = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (envBase) {
     return envBase.replace(/\/+$/, "");
   }
 
+  // Fallback to window.location.origin in production if NEXT_PUBLIC_APP_URL is not set
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin.replace(/\/+$/, "");
   }

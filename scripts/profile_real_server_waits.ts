@@ -5,7 +5,6 @@ import { db } from "../src/lib/db";
 import { Role } from "@prisma/client";
 import { createLink, updateLinkRules } from "../src/lib/services/link.service";
 import { addBlockedDomain } from "../src/lib/services/blocked-domain.service";
-import { createSessionToken } from "../src/lib/auth/session";
 
 interface LoggedQuery {
   query: string;

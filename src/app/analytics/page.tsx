@@ -160,14 +160,14 @@ export default function AnalyticsPage() {
         );
       case "NEAR_LIMIT":
         return (
-          <span className="badge badge-inactive flex items-center gap-1" style={{ fontSize: "0.75rem", backgroundColor: "var(--color-yellow)" }}>
+          <span className="badge badge-near-limit flex items-center gap-1" style={{ fontSize: "0.75rem" }}>
             <AlertTriangle size={13} strokeWidth={2.5} />
             <span>Near Limit</span>
           </span>
         );
       case "EXPIRING_SOON":
         return (
-          <span className="badge badge-inactive flex items-center gap-1" style={{ fontSize: "0.75rem", backgroundColor: "var(--color-yellow)" }}>
+          <span className="badge badge-expiring-soon flex items-center gap-1" style={{ fontSize: "0.75rem" }}>
             <Clock size={13} strokeWidth={2.5} />
             <span>Expiring Soon</span>
           </span>
@@ -598,7 +598,14 @@ export default function AnalyticsPage() {
                       {dev.count} ({dev.percentage}%)
                     </span>
                   </div>
-                  <div style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                  <div
+                    role="progressbar"
+                    aria-valuenow={dev.percentage}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Device ${dev.name}: ${dev.count} visits (${dev.percentage}%)`}
+                    style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}
+                  >
                     <div style={{ width: `${dev.percentage}%`, height: "100%", backgroundColor: "var(--color-blue)", borderRight: dev.percentage > 0 && dev.percentage < 100 ? "1.5px solid var(--color-ink)" : "none" }} />
                   </div>
                 </div>
@@ -630,7 +637,14 @@ export default function AnalyticsPage() {
                       {b.count} ({b.percentage}%)
                     </span>
                   </div>
-                  <div style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                  <div
+                    role="progressbar"
+                    aria-valuenow={b.percentage}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Browser ${b.name}: ${b.count} visits (${b.percentage}%)`}
+                    style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}
+                  >
                     <div style={{ width: `${b.percentage}%`, height: "100%", backgroundColor: "var(--color-yellow)", borderRight: b.percentage > 0 && b.percentage < 100 ? "1.5px solid var(--color-ink)" : "none" }} />
                   </div>
                 </div>
@@ -672,7 +686,14 @@ export default function AnalyticsPage() {
                       {ref.count} ({ref.percentage}%)
                     </span>
                   </div>
-                  <div style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                  <div
+                    role="progressbar"
+                    aria-valuenow={ref.percentage}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Referrer ${ref.name}: ${ref.count} visits (${ref.percentage}%)`}
+                    style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}
+                  >
                     <div style={{ width: `${ref.percentage}%`, height: "100%", backgroundColor: "var(--color-coral)", borderRight: ref.percentage > 0 && ref.percentage < 100 ? "1.5px solid var(--color-ink)" : "none" }} />
                   </div>
                 </div>
@@ -706,7 +727,14 @@ export default function AnalyticsPage() {
                         {src.count} ({src.percentage}%)
                       </span>
                     </div>
-                    <div style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                    <div
+                      role="progressbar"
+                      aria-valuenow={src.percentage}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`Source ${src.name}: ${src.count} visits (${src.percentage}%)`}
+                      style={{ width: "100%", height: "10px", backgroundColor: "var(--color-paper)", border: "1.5px solid var(--color-ink)", borderRadius: "var(--radius-full)", overflow: "hidden" }}
+                    >
                       <div
                         style={{
                           width: `${src.percentage}%`,

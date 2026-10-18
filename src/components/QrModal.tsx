@@ -194,7 +194,7 @@ export function QrModal({ link, isOpen, onClose }: QrModalProps) {
         </div>
 
         <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: 0, fontWeight: 600 }}>
-          Physical print scans are automatically distinguished from browser clicks in your telemetry dashboard.
+          Physical print scans are automatically distinguished from browser visits in your analytics.
         </p>
       </div>
     </div>

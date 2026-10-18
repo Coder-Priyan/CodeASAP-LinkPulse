@@ -412,7 +412,7 @@ export default function AdminPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1rem", alignItems: "flex-end" }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="domainInput">
-                Domain Name (e.g. malicious-site.com)
+                Domain Name <span style={{ color: "var(--color-text-danger)" }}>*</span>
               </label>
               <input
                 id="domainInput"
@@ -420,15 +420,23 @@ export default function AdminPage() {
                 className="form-input"
                 placeholder="malicious-site.com or https://evil.com"
                 value={newDomain}
-                onChange={(e) => setNewDomain(e.target.value)}
+                onChange={(e) => {
+                  setNewDomain(e.target.value);
+                  if (domainError) setDomainError(null);
+                }}
                 disabled={addingDomain}
                 style={{ minHeight: "44px" }}
+                aria-describedby="domainHint domainErrorText"
+                aria-invalid={Boolean(domainError)}
               />
+              <span id="domainHint" className="form-hint">
+                Enter a domain or hostname (e.g. malicious-site.com). Subdomains are automatically covered.
+              </span>
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="reasonInput">
-                Optional Reason
+                Optional Reason <span style={{ fontWeight: 400, color: "var(--color-muted)" }}>(Policy note)</span>
               </label>
               <input
                 id="reasonInput"
@@ -440,6 +448,7 @@ export default function AdminPage() {
                 disabled={addingDomain}
                 style={{ minHeight: "44px" }}
               />
+              <span className="form-hint">Visible to other administrators in the registry</span>
             </div>
 
             <div>
@@ -466,14 +475,14 @@ export default function AdminPage() {
           </div>
 
           {domainError && (
-            <div className="alert alert-error" style={{ marginTop: "1rem" }}>
+            <div id="domainErrorText" className="alert alert-error" role="alert" style={{ marginTop: "1rem" }}>
               <AlertCircle size={16} style={{ flexShrink: 0 }} />
               <span style={{ fontWeight: 600 }}>{domainError}</span>
             </div>
           )}
 
           {domainSuccess && (
-            <div className="alert alert-success" style={{ marginTop: "1rem" }}>
+            <div className="alert alert-success" role="status" style={{ marginTop: "1rem" }}>
               <CheckCircle size={16} style={{ flexShrink: 0 }} />
               <span style={{ fontWeight: 600 }}>{domainSuccess}</span>
             </div>

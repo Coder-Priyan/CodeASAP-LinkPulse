@@ -225,7 +225,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditL
       aria-labelledby="edit-link-title"
       className="modal-backdrop"
     >
-      <div ref={modalRef} className="modal" style={{ maxWidth: "580px", textAlign: "left" }}>
+      <div ref={modalRef} className="modal" style={{ maxWidth: "660px", textAlign: "left" }}>
         <div className="modal-header">
           <div>
             <h2 id="edit-link-title" className="modal-title flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
@@ -268,7 +268,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditL
 
         <form onSubmit={handleSubmit}>
           {/* Link Title */}
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: "1rem" }}>
             <label className="form-label" htmlFor="editTitle">
               Link Title (Optional)
             </label>
@@ -284,7 +284,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditL
           </div>
 
           {/* Destination URL */}
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: "1rem" }}>
             <label className="form-label flex items-center gap-2" htmlFor="editDest">
               <Globe size={16} />
               <span>Destination URL</span>
@@ -310,7 +310,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditL
               backgroundColor: "var(--color-paper)",
               border: "var(--border-thick)",
               boxShadow: "var(--shadow-hard-sm)",
-              marginBottom: "1.25rem",
+              marginBottom: "1rem",
               gap: "1rem",
               flexWrap: "wrap",
             }}
@@ -360,7 +360,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditL
           </div>
 
           {!isActive && (
-            <div className="form-group">
+            <div className="form-group" style={{ marginBottom: "1rem" }}>
               <label className="form-label" htmlFor="editReason">
                 Deactivation Reason (Optional)
               </label>
@@ -375,88 +375,95 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditL
             </div>
           )}
 
-          {/* Campaign Selection */}
-          <div className="form-group">
-            <label className="form-label flex items-center gap-2" htmlFor="editCamp">
-              <Layers size={16} />
-              <span>Assigned Campaign</span>
-            </label>
-            <select
-              id="editCamp"
-              className="form-input"
-              value={campaignId}
-              onChange={(e) => setCampaignId(e.target.value)}
-            >
-              <option value="">No Campaign (None)</option>
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Organization Grid: Campaign & Tags */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+            {/* Campaign Selection */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label flex items-center gap-2" htmlFor="editCamp">
+                <Layers size={16} />
+                <span>Assigned Campaign</span>
+              </label>
+              <select
+                id="editCamp"
+                className="form-input"
+                value={campaignId}
+                onChange={(e) => setCampaignId(e.target.value)}
+              >
+                <option value="">No Campaign (None)</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Tags Selection */}
-          <div className="form-group">
-            <label className="form-label flex items-center gap-2">
-              <TagIcon size={16} />
-              <span>Assigned Tags</span>
-            </label>
-            <div className="flex gap-1.5" style={{ flexWrap: "wrap", marginTop: "0.35rem" }}>
-              {tags.map((t) => {
-                const isSelected = selectedTagIds.includes(t.id);
-                return (
-                  <button
-                    type="button"
-                    key={t.id}
-                    onClick={() => toggleTag(t.id)}
-                    className={`tag-pill ${isSelected ? "selected" : ""}`}
-                  >
-                    {isSelected ? `✓ #${t.name}` : `#${t.name}`}
-                  </button>
-                );
-              })}
-              {tags.length === 0 && (
-                <span style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>No tags created yet.</span>
-              )}
+            {/* Tags Selection */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label flex items-center gap-2">
+                <TagIcon size={16} />
+                <span>Assigned Tags</span>
+              </label>
+              <div className="flex gap-1.5" style={{ flexWrap: "wrap", marginTop: "0.35rem" }}>
+                {tags.map((t) => {
+                  const isSelected = selectedTagIds.includes(t.id);
+                  return (
+                    <button
+                      type="button"
+                      key={t.id}
+                      onClick={() => toggleTag(t.id)}
+                      className={`tag-pill ${isSelected ? "selected" : ""}`}
+                    >
+                      {isSelected ? `✓ #${t.name}` : `#${t.name}`}
+                    </button>
+                  );
+                })}
+                {tags.length === 0 && (
+                  <span style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>No tags created yet.</span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Expiration Date */}
-          <div className="form-group">
-            <label className="form-label flex items-center gap-2" htmlFor="editExpiry">
-              <Clock size={16} />
-              <span>Expiration Date (Leave blank to remove)</span>
-            </label>
-            <input
-              id="editExpiry"
-              type="datetime-local"
-              className="form-input"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-            />
-          </div>
+          {/* Rules Grid: Expiration Date & Click Limit */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+            {/* Expiration Date */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label flex items-center gap-2" htmlFor="editExpiry">
+                <Clock size={16} />
+                <span>Expiration Date</span>
+              </label>
+              <input
+                id="editExpiry"
+                type="datetime-local"
+                className="form-input"
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
+              />
+              <span className="form-hint">Leave blank to remove</span>
+            </div>
 
-          {/* Click Limit */}
-          <div className="form-group">
-            <label className="form-label flex items-center gap-2" htmlFor="editLimit">
-              <Gauge size={16} />
-              <span>Click Limit (Leave blank for unlimited)</span>
-            </label>
-            <input
-              id="editLimit"
-              type="number"
-              min="1"
-              className="form-input"
-              placeholder="e.g. 500"
-              value={clickLimit}
-              onChange={(e) => setClickLimit(e.target.value)}
-            />
-            <span className="form-hint">Recorded visits so far: {link.clicksCount}</span>
+            {/* Click Limit */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label flex items-center gap-2" htmlFor="editLimit">
+                <Gauge size={16} />
+                <span>Click Limit</span>
+              </label>
+              <input
+                id="editLimit"
+                type="number"
+                min="1"
+                className="form-input"
+                placeholder="e.g. 500"
+                value={clickLimit}
+                onChange={(e) => setClickLimit(e.target.value)}
+              />
+              <span className="form-hint">Recorded visits so far: {link.clicksCount}</span>
+            </div>
           </div>
 
           {/* Password Protection */}
-          <div className="form-group" style={{ marginBottom: "1.75rem" }}>
+          <div className="form-group" style={{ marginBottom: "1.5rem" }}>
             <label className="form-label flex items-center gap-2" htmlFor="editPass">
               <Lock size={16} />
               <span>Passcode Protection</span>

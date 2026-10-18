@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { PulseMascot } from "@/components/PulseMascot";
 
 export const metadata: Metadata = {
-  title: "Page Not Found",
+  title: "Page Not Found | LinkPulse",
 };
 
 export default function NotFound() {

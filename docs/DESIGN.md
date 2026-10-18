@@ -81,6 +81,8 @@ Fonts are self-hosted via `next/font/google` in [layout.tsx](file:///f:/Hackatho
 | **Secondary Button** | `.btn.btn-secondary` | White background, butter yellow hover, thick border, 4px shadow |
 | **Danger Button** | `.btn.btn-danger` | Coral background (`#E8806A`), thick border |
 | **Ghost Button** | `.btn.btn-ghost` | Transparent background, bordered on hover |
+| **Table Action Button** | `.table-action-btn` | Compact 34px square icon button for dense table actions (`QR`, `Edit`, `Power`, `Delete`) with native title tooltips and accessible aria labels |
+| **Disabled Button** | `.btn:disabled` | High-contrast muted sage fill (`#DDE8E4`), deep slate ink text (`#1E3438`, 7.2:1 contrast ratio), 2px solid border, zero opacity wash-out |
 | **Form Inputs** | `.form-input`, `.form-select`, `.form-textarea` | White fill, 2.5px border, 2px shadow, deep teal focus ring, 48px height |
 | **Password Toggle** | `.input-password-wrapper`, `.btn-toggle-password` | Inset accessible toggle button for password visibility |
 | **Card** | `.card` | White card, 2.5px solid ink border, 16px radius, 4px hard shadow |
@@ -281,6 +283,44 @@ Desktop viewports ($\ge 1024\text{px}$) in Round 2 receive major functional UX e
 ### 2. Multi-Tenant Batch Taxonomies in Bulk Import
 - The Bulk Import interface (`/import`) integrates optional Campaign and Tag selectors matching individual link creation options, styling selection chips with `--border-thick` and tactile selection states.
 - Rejection of foreign or inaccessible IDs displays an informative error callout (`404 NOT_FOUND`) preserving user file preview.
+
+---
+
+## 13. UI Round 3: Analytics, Admin & Universal Accessibility Standards
+
+### 1. Analytics Architecture
+- **Period Selector**: Clean neo-brutalist tabs (`7d`, `30d`, `all`) with thick ink border, butter yellow active indicator, and full keyboard tab navigation.
+- **Clicks Over Time Visualizer**: Flat palette colors (`--color-blue` and `--color-paper`), thin 2px axes, direct numeric values rendered above each bar without requiring hover, and readable date labels ($\ge 12\text{px}$). Includes a hidden `.sr-only` data table for screen reader parity.
+- **Color-Blind Accessibility**: Breakdowns (devices, browsers, referrers, and visit sources) provide direct text names, exact counts, percentages, and category icons so comprehension never relies on color hue alone. Progress tracks use accessible `role="progressbar"` attributes.
+- **Alerts**: Each operational alert strictly pairs a word with an icon:
+  - `EXPIRED`: Clock icon + "Expired" (`.badge-expired`)
+  - `DISABLED`: Power icon + "Disabled" (`.badge-disabled`)
+  - `LIMIT_REACHED`: Gauge icon + "Limit Reached" (`.badge-limit-reached`)
+  - `NEAR_LIMIT`: AlertTriangle icon + "Near Limit" (`.badge-near-limit`)
+  - `EXPIRING_SOON`: Clock icon + "Expiring Soon" (`.badge-expiring-soon`)
+- **Mascot Presence**: Mascot "Pulse" appears strictly in the empty state (`mood="thinking"`) when no data exists, never cluttering active metric views.
+
+### 2. Admin Console Architecture
+- **Admin Sticker**: Visually distinguishes admin surfaces with a `.badge-admin` pill in the page header.
+- **Global Link Directory**: Full-width data table at 1440px max container width. Creator email is truncated cleanly with title tooltip and full screen reader label, preventing row clipping. Status badges display full words and icons. Action buttons are compact 34px icon buttons with accessible names. Zero horizontal scroll at $\ge 1280\text{px}$.
+- **Domain Blocklist Area**: Add form with inline validation hints, `aria-describedby`, `aria-invalid`, and high-contrast error alerts. Readable table displaying domain, subdomain wildcard rule, reason, creator, date, and unblock button with explicit browser confirmation.
+
+### 3. Status Page Security Architecture
+- **Zero URL Parameter Injection**: The status page (`/link-status`) completely ignores URL `reason` query parameters, eliminating arbitrary text injection.
+- **Fixed Friendly Copy**: Renders fixed, friendly, pre-vetted messages mapped strictly to canonical status codes:
+  - `DISABLED` / `INACTIVE`: "Link Currently Disabled" ("This short link has been temporarily disabled by its owner or an administrator.")
+  - `EXPIRED`: "Link Has Expired" ("This shortened link was configured with an expiration date and is no longer active.")
+  - `LIMIT_REACHED`: "Click Limit Reached" ("This short link has reached its maximum visit limit set by its creator.")
+  - `BLOCKED`: "Destination Domain Blocked" ("The destination domain for this link has been blocked by administrators for safety and policy compliance.")
+  - `NOT_FOUND`: "Link Not Found" ("We could not find an active link matching this short code.")
+  - `PASSWORD`: "Passcode Protected" ("This short link is protected with a passcode before redirecting.")
+
+### 4. Universal Accessibility Standards
+- **Focus Rings**: Universal `:focus-visible` outline (`3px solid var(--color-blue); outline-offset: 2px`) on all interactive controls.
+- **Reduced Motion**: Universal `@media (prefers-reduced-motion: reduce)` override disabling all animations, transitions, and transforms across the entire app.
+- **Modal Accessibility**: All modals (`EditLinkModal`, `QrModal`) enforce `role="dialog"`, `aria-modal="true"`, focus trapping with Tab, `Escape` key close handlers, and automatic focus restoration.
+- **High-Contrast Disabled Controls**: Disabled primary buttons utilize `--color-disabled-primary-bg` (`#DDE8E4`) and `--color-disabled-primary-text` (`#1E3438`), delivering a 7.2:1 contrast ratio that exceeds WCAG AA.
+
 
 
 

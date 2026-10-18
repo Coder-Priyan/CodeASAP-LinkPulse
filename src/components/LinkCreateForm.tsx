@@ -475,8 +475,8 @@ export function LinkCreateForm({
       {/* STEP 1: Destination URL & Alias */}
       {step === 1 && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem", alignItems: "flex-start" }}>
-            <div className="form-group" style={{ marginBottom: "0.75rem", gridColumn: "1 / -1" }}>
+          <div className="create-link-grid-step1">
+            <div className="form-group" style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
               <label className="form-label" htmlFor="linkTitle">
                 Link Title <span style={{ fontWeight: 400, color: "var(--color-muted)" }}>(Optional)</span>
               </label>
@@ -489,10 +489,10 @@ export function LinkCreateForm({
                 maxLength={255}
                 onChange={(e) => setTitle(e.target.value)}
               />
-              <span className="form-hint">A clear label for tables, analytics, and team identification (max 255 chars)</span>
+              <span className="form-hint">A clear label for tables and reports (max 255 chars)</span>
             </div>
 
-            <div className="form-group" style={{ marginBottom: "0.75rem" }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="destUrl">
                 Destination URL <span style={{ color: "var(--color-text-danger)" }}>*</span>
               </label>
@@ -523,7 +523,7 @@ export function LinkCreateForm({
               )}
             </div>
 
-            <div className="form-group" style={{ marginBottom: "0.75rem" }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="customAlias">
                 Custom Alias <span style={{ fontWeight: 400, color: "var(--color-muted)" }}>(Optional)</span>
               </label>
@@ -553,35 +553,31 @@ export function LinkCreateForm({
               ) : (
                 <span className="form-hint">Leave blank to generate a random 6-character code</span>
               )}
+            </div>
 
-              <div
-                style={{
-                  marginTop: "0.5rem",
-                  padding: "0.35rem 0.65rem",
-                  backgroundColor: "var(--color-paper)",
-                  border: "1.5px solid var(--color-ink)",
-                  borderRadius: "var(--radius-sm)",
-                  fontSize: "0.825rem",
-                  fontFamily: "var(--font-mono-family)",
-                  color: "var(--color-ink)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  boxShadow: "1px 1px 0 var(--color-ink)",
-                }}
-              >
-                <span style={{ color: "var(--color-muted)", fontFamily: "var(--font-sans-family)", fontWeight: 700 }}>Preview:</span>
-                <strong>{buildShortUrl(customAlias.trim() || "random6")}</strong>
+            {/* Short Link Preview across full card width with wrapping text */}
+            <div className="create-link-preview-chip">
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0, flex: 1, flexWrap: "wrap" }}>
+                <span style={{ color: "var(--color-muted)", fontSize: "0.825rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>
+                  Short Link Preview:
+                </span>
+                <span className="create-link-preview-chip-text">
+                  {buildShortUrl(customAlias.trim() || "random6")}
+                </span>
               </div>
+              <span style={{ fontSize: "0.8rem", color: "var(--color-ink-muted)", fontWeight: 600, flexShrink: 0 }}>
+                {customAlias.trim() ? "Custom alias active" : "6-character random code will be generated"}
+              </span>
             </div>
           </div>
 
-          <div style={{ marginTop: "1.25rem", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
             <button
               type="button"
               className="btn btn-primary"
               onClick={handleNextStep}
               disabled={!destinationUrl.trim() || (urlValidation !== null && !urlValidation.isValid)}
+              title={!destinationUrl.trim() ? "Enter a destination URL to proceed" : "Continue to Rules & Tags"}
             >
               <span>Next: Set Rules & Tags</span>
               <ArrowRight size={18} strokeWidth={2.5} />
@@ -831,7 +827,7 @@ export function LinkCreateForm({
             }}
           >
             <div style={{ fontSize: "0.85rem", fontWeight: 800, marginBottom: "0.5rem", color: "var(--color-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              Rule Summary & Policy Review
+              Rule Summary
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", fontSize: "0.9rem", color: "var(--color-ink)" }}>
