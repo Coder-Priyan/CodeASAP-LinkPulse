@@ -241,6 +241,28 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
   });
 
   it("enforces RBAC on blocklist endpoints: normal users get 403, admin has full access", async () => {
+    // 0. Unauthenticated (logged-out) visitor -> 401 on GET, POST, DELETE
+    mockUser = null;
+    const anonGetReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains");
+    const anonGetRes = await getDomainsHandler(anonGetReq);
+    expect(anonGetRes.status).toBe(401);
+
+    const anonPostReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: "anon-blocked.com" }),
+    });
+    const anonPostRes = await postDomainHandler(anonPostReq);
+    expect(anonPostRes.status).toBe(401);
+
+    const anonDeleteReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains/some-id", {
+      method: "DELETE",
+    });
+    const anonDeleteRes = await deleteDomainHandler(anonDeleteReq, {
+      params: Promise.resolve({ id: "some-id" }),
+    });
+    expect(anonDeleteRes.status).toBe(401);
+
     // 1. Normal user GET /api/admin/blocked-domains -> 403
     mockUser = { userId: normalUser.id, email: normalUser.email, role: Role.USER };
     const userGetReq = new NextRequest("http://localhost:3000/api/admin/blocked-domains");

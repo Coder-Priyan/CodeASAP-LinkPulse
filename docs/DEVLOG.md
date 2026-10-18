@@ -1,5 +1,21 @@
 # LinkPulse Devlog
 
+### 2026-10-18 — Round: Loading Screen Follow-Up (Truthful Ambient Copy, Admin 401 Checks, Fake-Timer Tests)
+- **What**: Refined the loading screen copy to be truthful and ambient, purged all infrastructure jargon ("remote Neon connection"), verified admin server-side protection with explicit unauthenticated 401 tests, added automated fake-timer tests, verified `LinksTable.tsx` diff, and conducted truthful multi-run benchmark reporting.
+- **Why**: 
+  1. Status messages and progress were timer-based; presenting them as literal backend stages was misleading.
+  2. Jargon like "remote Neon connection" leaked database infrastructure details to end users.
+  3. Automated tests for unauthenticated admin access (401) and fake-timer unit tests for the loading screen component states were needed.
+  4. Benchmark reporting needed to clearly distinguish frontend perceived feel from server-side Neon database latency.
+- **How**:
+  1. *Truthful Ambient Copy*: Extracted loading presets and pure progression math into `src/lib/utils/loading-state.ts`. Clarified that steps are smooth ambient messages ("Opening your dashboard...", "Gathering recent stats...", "Opening analytics...", "Verifying administrator access...") rather than literal sequential API event hooks. Replaced infra jargon with plain, warm user-facing wording ("Still working on loading your links...").
+  2. *Admin Enforcement & Tests*: Verified that `/api/admin/blocked-domains` and `/api/admin/blocked-domains/[id]` execute `await requireAdmin()`, which throws `AuthError(401)` for logged-out visitors and `AuthError(403)` for non-admin users. Added 3 explicit unauthenticated tests (`mockUser = null`) in `test/blocked-domain.test.ts` asserting 401 for GET, POST, and DELETE.
+  3. *Fake-Timer Tests*: Created `test/loading-screen.test.ts` (10 tests) covering the infrastructure jargon audit across all presets, anti-flash delay calculation, fake-timer step progression, exact 3.5s long-wait threshold triggering thinking mascot, 12s timeout triggering error state, and manual error overrides.
+  4. *Diff Verification*: Inspected `LinksTable.tsx` diff against previous commit (`HEAD~1`); confirmed zero behavior, sorting, filtering, shortcuts, or optimistic mutations were lost.
+  5. *10-Run Benchmark*: Executed 10 iterations against production build reporting median and p95. Clarified that API timings reflect remote database I/O, not frontend loading component rendering.
+- **Requirement**: Follow-up pass on loading screens: honest copy, zero infra jargon, admin 401 tests, fake-timer loading screen tests, 1280px screenshots without live DB writes, and honest reporting.
+- **Next**: Ready for production review.
+
 ### 2026-10-18 — Round: Restore Alive Loading Pages
 - **What**: Restored full-page loading transitions across `/dashboard`, `/analytics`, and `/admin` while completely removing skeleton placeholders (`.skeleton-*`), replacing the dull spinner card with a lively shared neo-brutalist `LoadingScreen` component.
 - **Why**: Skeletons fragmented the page transition feel and were explicitly rejected by the owner. The original loading cards felt frozen. The new full-page loading screen communicates live background activity, brand personality, and reassurance during remote network operations.
