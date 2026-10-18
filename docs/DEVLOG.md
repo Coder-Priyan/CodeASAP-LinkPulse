@@ -31,6 +31,25 @@
   6. **Phase 6: Documentation & Verification (Zero Risk)**:
      - Update `README.md`, `docs/DESIGN.md`, and `docs/DEVLOG.md` with real benchmark numbers, API changes, and testing instructions.
 
+- **Execution & Real Numbers**:
+  - **Leftover Review Hardening**:
+    - CSV Bulk Import: added user ownership verification for `campaignId` and every item in `tagIds` in `executeCsvImport` and route handler with 403 Forbidden on foreign IDs. Added dedicated test in `test/csv-import.test.ts`.
+    - QR Size Parameter: implemented `normalizeQrSize` in `qr.service.ts` and `[id]/qr/route.ts` with [120, 2048] clamping and safe 360 fallback on `NaN`, empty, negative, or non-numeric inputs. Verified PNG and SVG at every size encode `?src=qr`. Added tests in `test/qr.test.ts`.
+    - Link Title Editing: implemented `sanitizeLinkTitle` in `link.service.ts` enforcing trimming, 255-character max limit (422), and empty-to-null across link creation and PATCH updates. Added title input to `LinkCreateForm.tsx` step 1 and verified PATCH ownership enforcement (403). Added tests in `test/link-patch.test.ts`.
+  - **Test Suite Fixture Isolation & Live DB Protection**:
+    - Replaced all hardcoded `example.com` target URLs across test fixtures with `https://pulse-safe-test-target.org/...`, preventing collisions with the live Neon DB `Manual Test` blocked-domain row without touching production records.
+    - Added test-environment TTL bypass for domain blocklist cache to ensure instantaneous test fixture reflection.
+    - All tests clean up created records.
+  - **Performance & Architectural Upgrades**:
+    - High-throughput redirect path optimization: in-memory `cachedDomainsMap` with 30s TTL in `blocked-domain.service.ts` eliminating remote Neon PostgreSQL round-trips on every redirect.
+    - Database index migration artifact: created `prisma/migrations/20261018_performance_indexes/migration.sql` with composite indexes for `Link(userId, createdAt DESC)`, `Link(userId, isActive)`, and `ClickEvent(linkId, timestamp DESC)`. Annotated in `prisma/schema.prisma` and generated Prisma client. (Explicitly not applied to live DB per zero-mutation rule).
+  - **Post-Pass Verification Metrics**:
+    - Vitest: 14 test files passed (14/14), 80 tests passed (80/80), 0 failures. (Baseline was 14 files: 7 passed, 7 failed; 59 passed, 16 failed).
+    - TypeScript Typecheck (`npx tsc --noEmit`): 0 errors, exit code 0.
+    - ESLint (`npm run lint`): 0 warnings, 0 errors, exit code 0.
+    - Next.js Production Build (`npm run build`): Compiled successfully in 3.7s; 24 static pages; shared First Load JS 103 kB.
+    - Desktop Browser Verification (1280x800): Verified `/` and `/login` rendering and aesthetics via browser subagent.
+
 - **What**: Executed Round 3 across all surfaces not covered or only partially touched in earlier rounds:
   - Redesign Pass:
     - Navbar: Responsive touch targets, clean session chip, role badges (`Admin` vs `User`), accessible aria-labels.
