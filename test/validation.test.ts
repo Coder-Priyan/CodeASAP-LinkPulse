@@ -1,8 +1,33 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { db } from "@/lib/db";
+import { Role } from "@prisma/client";
+import { NextRequest } from "next/server";
 import { validateUrl } from "@/lib/validations/url-validator";
 import { validateCustomAlias } from "@/lib/validations/alias-validator";
-import { createLink, LinkServiceError } from "@/lib/services/link.service";
+import { createLink, updateLinkRules, LinkServiceError } from "@/lib/services/link.service";
+
+let mockUser: { userId: string; role: Role; email: string } | null = null;
+
+vi.mock("@/lib/auth/guard", () => {
+  class AuthError extends Error {
+    constructor(message: string, public status: number = 401) {
+      super(message);
+      this.name = "AuthError";
+    }
+  }
+
+  return {
+    AuthError,
+    requireAuth: vi.fn(async () => {
+      if (!mockUser) {
+        throw new AuthError("Authentication required.", 401);
+      }
+      return mockUser;
+    }),
+  };
+});
+
+import { GET as getLinksHandler } from "@/app/api/links/route";
 
 describe("4. URL and Alias Validation", () => {
   let testUserId: string;
@@ -17,6 +42,7 @@ describe("4. URL and Alias Validation", () => {
       },
     });
     testUserId = user.id;
+    mockUser = { userId: user.id, role: Role.USER, email: user.email };
   });
 
   afterAll(async () => {
@@ -131,4 +157,71 @@ describe("4. URL and Alias Validation", () => {
       }
     });
   });
+
+  describe("Limit and Offset Validation on /api/links", () => {
+    it("rejects non-integer, negative, or zero limit with 400", async () => {
+      const invalidLimits = ["abc", "-5", "0", "1.5", "NaN"];
+      for (const l of invalidLimits) {
+        const req = new NextRequest(`http://localhost:3000/api/links?limit=${l}`);
+        const res = await getLinksHandler(req);
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.error).toMatch(/positive integer/i);
+      }
+    });
+
+    it("rejects limit exceeding maximum cap of 100 with 400", async () => {
+      const req = new NextRequest("http://localhost:3000/api/links?limit=101");
+      const res = await getLinksHandler(req);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toMatch(/cannot exceed maximum cap of 100/i);
+    });
+
+    it("rejects non-integer or negative offset with 400", async () => {
+      const invalidOffsets = ["abc", "-1", "-10", "2.5"];
+      for (const o of invalidOffsets) {
+        const req = new NextRequest(`http://localhost:3000/api/links?offset=${o}`);
+        const res = await getLinksHandler(req);
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.error).toMatch(/non-negative integer/i);
+      }
+    });
+
+    it("accepts valid limit and offset within constraints", async () => {
+      const req = new NextRequest("http://localhost:3000/api/links?limit=10&offset=0");
+      const res = await getLinksHandler(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(Array.isArray(data.links)).toBe(true);
+    });
+  });
+
+  describe("Privacy & PasswordHash Sanitization", () => {
+    it("never includes passwordHash or private fields in createLink or updateLinkRules response", async () => {
+      const link = await createLink({
+        destinationUrl: "https://pulse-safe-test-target.org/password-test",
+        userId: testUserId,
+        password: "secretpassword123",
+      });
+      createdLinkIds.push(link.id);
+
+      // Verify createLink omits passwordHash
+      expect(link.hasPassword).toBe(true);
+      expect((link as any).passwordHash).toBeUndefined();
+      expect((link as any).disabledAt).toBeUndefined();
+
+      // Verify updateLinkRules omits passwordHash
+      const updated = await updateLinkRules(link.id, testUserId, Role.USER, {
+        password: "updatedpassword456",
+        title: "Updated Secret Link",
+      });
+
+      expect(updated.hasPassword).toBe(true);
+      expect((updated as any).passwordHash).toBeUndefined();
+      expect((updated as any).disabledAt).toBeUndefined();
+    });
+  });
 });
+

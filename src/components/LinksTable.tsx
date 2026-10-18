@@ -986,6 +986,12 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
               onRefresh();
             }
           }}
+          onError={(errorMessage, rollbackLink) => {
+            setDisplayLinks((prev) =>
+              prev.map((l) => (l.id === rollbackLink.id ? rollbackLink : l))
+            );
+            showToast(`Update failed: ${errorMessage} (Reverted)`);
+          }}
         />
       )}
 

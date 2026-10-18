@@ -10,6 +10,7 @@ interface EditLinkModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved: (updatedLink?: LinkItem) => void;
+  onError?: (errorMessage: string, rollbackLink: LinkItem) => void;
 }
 
 interface CampaignOption {
@@ -23,7 +24,7 @@ interface TagOption {
   color: string | null;
 }
 
-export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalProps) {
+export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditLinkModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const [title, setTitle] = useState(link.title || "");
@@ -127,67 +128,94 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
-    try {
-      const res = await fetch(`/api/links/${link.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim() || null,
-          destinationUrl: destinationUrl.trim(),
-          isActive,
-          disabledReason: isActive ? null : disabledReason.trim() || "Disabled by user",
-          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-          clickLimit: clickLimit ? parseInt(clickLimit, 10) : null,
-          password: newPassword.trim() ? newPassword.trim() : undefined,
-          removePassword,
-          campaignId: campaignId ? campaignId : null,
-          tagIds: selectedTagIds,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update link rules.");
+    // Synchronous client-side validations
+    if (expiresAt) {
+      const expDate = new Date(expiresAt);
+      if (isNaN(expDate.getTime()) || expDate.getTime() <= Date.now()) {
+        setError("Expiration date must be in the future.");
+        return;
       }
-
-      const isPastExpiry = Boolean(expiresAt && new Date(expiresAt).getTime() <= Date.now());
-      const isLimitReached = Boolean(clickLimit && (link.clicksCount || 0) >= parseInt(clickLimit, 10));
-      let computedState: "active" | "disabled" | "expired" | "limit_reached" = "active";
-      if (!isActive) {
-        computedState = "disabled";
-      } else if (isPastExpiry) {
-        computedState = "expired";
-      } else if (isLimitReached) {
-        computedState = "limit_reached";
-      }
-
-      const updatedLinkItem: LinkItem = {
-        ...link,
-        title: data.link.title ?? (title.trim() || null),
-        destinationUrl: data.link.destinationUrl || destinationUrl.trim(),
-        isActive: data.link.isActive,
-        state: computedState,
-        disabledReason: data.link.disabledReason || null,
-        expiresAt: data.link.expiresAt || null,
-        clickLimit: data.link.clickLimit || null,
-        hasPassword: removePassword ? false : (newPassword.trim() ? true : link.hasPassword),
-        campaign: campaigns.find((c) => c.id === campaignId) || null,
-        tags: tags.filter((t) => selectedTagIds.includes(t.id)),
-      };
-
-      onSaved(updatedLinkItem);
-      onClose();
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An error occurred while saving link rules.");
-      }
-    } finally {
-      setLoading(false);
     }
+
+    if (clickLimit) {
+      const limit = parseInt(clickLimit, 10);
+      if (isNaN(limit) || limit <= 0) {
+        setError("Click limit must be a positive number.");
+        return;
+      }
+    }
+
+    if (newPassword && newPassword.trim().length > 0 && newPassword.trim().length < 4) {
+      setError("Passcode must be at least 4 characters long.");
+      return;
+    }
+
+    const isPastExpiry = Boolean(expiresAt && new Date(expiresAt).getTime() <= Date.now());
+    const isLimitReached = Boolean(clickLimit && (link.clicksCount || 0) >= parseInt(clickLimit, 10));
+    let computedState: "active" | "disabled" | "expired" | "limit_reached" = "active";
+    if (!isActive) {
+      computedState = "disabled";
+    } else if (isPastExpiry) {
+      computedState = "expired";
+    } else if (isLimitReached) {
+      computedState = "limit_reached";
+    }
+
+    const optimisticLinkItem: LinkItem = {
+      ...link,
+      title: title.trim() || null,
+      destinationUrl: destinationUrl.trim(),
+      isActive,
+      state: computedState,
+      disabledReason: isActive ? null : (disabledReason.trim() || "Disabled by user"),
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      clickLimit: clickLimit ? parseInt(clickLimit, 10) : null,
+      hasPassword: removePassword ? false : (newPassword.trim() ? true : link.hasPassword),
+      campaign: campaigns.find((c) => c.id === campaignId) || null,
+      tags: tags.filter((t) => selectedTagIds.includes(t.id)),
+    };
+
+    // INSTANT FEEDBACK: apply optimistic update to UI and close modal immediately
+    onSaved(optimisticLinkItem);
+    onClose();
+
+    // Background reconciliation & rollback on error
+    fetch(`/api/links/${link.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title.trim() || null,
+        destinationUrl: destinationUrl.trim(),
+        isActive,
+        disabledReason: isActive ? null : disabledReason.trim() || "Disabled by user",
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+        clickLimit: clickLimit ? parseInt(clickLimit, 10) : null,
+        password: newPassword.trim() ? newPassword.trim() : undefined,
+        removePassword,
+        campaignId: campaignId ? campaignId : null,
+        tagIds: selectedTagIds,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to update link rules.");
+        }
+        const reconciledLinkItem: LinkItem = {
+          ...optimisticLinkItem,
+          ...data.link,
+          tags: data.link.tags || optimisticLinkItem.tags,
+          campaign: data.link.campaign || optimisticLinkItem.campaign,
+        };
+        onSaved(reconciledLinkItem);
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "Failed to update link rules.";
+        if (onError) {
+          onError(msg, link);
+        }
+      });
   };
 
   return (

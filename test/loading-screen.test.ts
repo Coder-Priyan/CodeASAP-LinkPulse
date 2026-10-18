@@ -197,4 +197,40 @@ describe("Loading Screen State Transitions and Copy Integrity", () => {
       expect(getSimulatedState().mood).toBe("sad");
     });
   });
+
+  describe("5. Abandoned Navigation Stale Timestamp Safety", () => {
+    it("expires stale loading start timestamps when user returns after abandoning a previous visit", async () => {
+      const { markLoadingStarted, clearLoadingStarted, STALE_NAVIGATION_TTL_MS } = await import(
+        "@/lib/utils/loading-state"
+      );
+
+      // 1. Initial navigation started at t = 1,000,000
+      const initialTime = 1_000_000;
+      clearLoadingStarted("dashboard");
+      const t1 = markLoadingStarted("dashboard", initialTime);
+      expect(t1).toBe(initialTime);
+
+      // 2. Continuous visit within valid TTL keeps original start timestamp
+      const withinTtl = initialTime + 500;
+      const t2 = markLoadingStarted("dashboard", withinTtl);
+      expect(t2).toBe(initialTime);
+
+      // 3. User abandoned navigation and returns 30 seconds later (> STALE_NAVIGATION_TTL_MS)
+      const abandonedReturnTime = initialTime + STALE_NAVIGATION_TTL_MS + 20_000;
+      const t3 = markLoadingStarted("dashboard", abandonedReturnTime);
+      // Must NOT return t1 (initialTime), because doing so would immediately poison the screen with 30s elapsed!
+      expect(t3).toBe(abandonedReturnTime);
+      expect(t3).not.toBe(initialTime);
+
+      // 4. clearLoadingStarted removes entry completely
+      clearLoadingStarted("dashboard");
+      const freshTime = 2_000_000;
+      const t4 = markLoadingStarted("dashboard", freshTime);
+      expect(t4).toBe(freshTime);
+
+      // Cleanup
+      clearLoadingStarted("dashboard");
+    });
+  });
 });
+

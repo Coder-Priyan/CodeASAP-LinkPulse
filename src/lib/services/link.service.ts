@@ -504,7 +504,7 @@ export async function getUserLinks(
 
   const links = await db.link.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: filters.limit,
     skip: filters.offset,
     include: {
@@ -575,7 +575,7 @@ export async function getAllLinksAdmin(filters: LinkFilters = {}): Promise<LinkW
 
   const links = await db.link.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: filters.limit,
     skip: filters.offset,
     include: {
@@ -768,7 +768,7 @@ export async function updateLinkRules(
     }
   }
 
-  return db.link.update({
+  const updated = await db.link.update({
     where: { id: linkId },
     data: updateData,
     include: {
@@ -777,6 +777,33 @@ export async function updateLinkRules(
       tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
     },
   });
+
+  const state = computeLinkState({
+    isActive: updated.isActive,
+    expiresAt: updated.expiresAt,
+    clickLimit: updated.clickLimit,
+    clicksCount: updated.clicksCount,
+  });
+
+  return {
+    id: updated.id,
+    code: updated.code,
+    destinationUrl: updated.destinationUrl,
+    title: updated.title,
+    isActive: updated.isActive,
+    disabledReason: updated.disabledReason,
+    expiresAt: updated.expiresAt,
+    clickLimit: updated.clickLimit,
+    hasPassword: Boolean(updated.passwordHash),
+    campaignId: updated.campaignId,
+    campaign: updated.campaign,
+    tags: updated.tags.map((t) => t.tag),
+    createdAt: updated.createdAt,
+    updatedAt: updated.updatedAt,
+    clicksCount: updated.clicksCount,
+    state,
+    user: updated.user,
+  };
 }
 
 /**

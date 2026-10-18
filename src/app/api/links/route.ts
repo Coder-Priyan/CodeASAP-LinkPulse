@@ -18,8 +18,36 @@ export async function GET(request: NextRequest) {
     const tagId = searchParams.get("tagId") || undefined;
     const limitParam = searchParams.get("limit");
     const offsetParam = searchParams.get("offset");
-    const limit = limitParam ? Math.max(1, parseInt(limitParam, 10)) : undefined;
-    const offset = offsetParam ? Math.max(0, parseInt(offsetParam, 10)) : undefined;
+
+    let limit: number | undefined = undefined;
+    if (limitParam !== null) {
+      const parsed = Number(limitParam);
+      if (!Number.isInteger(parsed) || parsed < 1 || isNaN(parsed)) {
+        return NextResponse.json(
+          { error: "Query parameter 'limit' must be a positive integer." },
+          { status: 400 }
+        );
+      }
+      if (parsed > 100) {
+        return NextResponse.json(
+          { error: "Query parameter 'limit' cannot exceed maximum cap of 100." },
+          { status: 400 }
+        );
+      }
+      limit = parsed;
+    }
+
+    let offset: number | undefined = undefined;
+    if (offsetParam !== null) {
+      const parsed = Number(offsetParam);
+      if (!Number.isInteger(parsed) || parsed < 0 || isNaN(parsed)) {
+        return NextResponse.json(
+          { error: "Query parameter 'offset' must be a non-negative integer." },
+          { status: 400 }
+        );
+      }
+      offset = parsed;
+    }
 
     const filters = { campaignId, tagId, limit, offset };
 

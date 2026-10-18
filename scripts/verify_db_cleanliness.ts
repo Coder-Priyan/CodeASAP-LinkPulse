@@ -1,10 +1,18 @@
 import { db } from "../src/lib/db";
 
 async function main() {
+  console.log("=== LinkPulse Database Cleanliness Verification ===");
+
   const domains = await db.blockedDomain.findMany({
     where: {
       OR: [
         { domain: { contains: "test-" } },
+        { domain: { contains: "prof-" } },
+        { domain: { contains: "bench-" } },
+        { domain: { contains: "perf-" } },
+        { domain: { contains: "mutation-" } },
+        { domain: { contains: "redirect-check-" } },
+        { domain: { contains: "pwd-block-" } },
         { domain: { contains: "evil-site" } },
         { domain: { contains: "spam-network" } },
         { domain: { contains: "phishing-attack" } },
@@ -22,13 +30,21 @@ async function main() {
     where: {
       OR: [
         { code: { startsWith: "test-" } },
+        { code: { startsWith: "prof-" } },
+        { code: { startsWith: "bench-" } },
+        { code: { startsWith: "mut-" } },
+        { code: { startsWith: "b-" } },
+        { code: { startsWith: "thr-" } },
+        { code: { startsWith: "fix-" } },
         { title: { contains: "Fixture" } },
+        { title: { contains: "Benchmark" } },
+        { title: { contains: "Profiling" } },
       ],
     },
   });
   console.log("Leftover test links count:", testLinks.length);
   if (testLinks.length > 0) {
-    console.log("Leftover links:", testLinks.map((l) => ({ id: l.id, code: l.code })));
+    console.log("Leftover links:", testLinks.map((l) => ({ id: l.id, code: l.code, title: l.title })));
   }
 
   const testUsers = await db.user.findMany({
@@ -37,13 +53,15 @@ async function main() {
         { email: { contains: "test-" } },
         { email: { contains: "alice-" } },
         { email: { contains: "bob-" } },
-        { email: { contains: "admin-" } },
+        { email: { contains: "admin-block-" } },
+        { email: { contains: "testuser_" } },
+        { email: { contains: "@linkpulse.test" } },
       ],
     },
   });
   console.log("Leftover test users count:", testUsers.length);
   if (testUsers.length > 0) {
-    console.log("Leftover users:", testUsers.map((u) => ({ id: u.id, email: u.email })));
+    console.log("Leftover users:", testUsers.map((u) => ({ id: u.id, email: u.email, role: u.role })));
   }
 }
 

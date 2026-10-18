@@ -169,3 +169,27 @@ export function computeAntiFlashDelay(
   const elapsed = nowMs - startTimeMs;
   return elapsed < minDisplayMs ? minDisplayMs - elapsed : 0;
 }
+
+export const STALE_NAVIGATION_TTL_MS = 10_000;
+
+const globalLoadingStartTimes = new Map<string, number>();
+
+export function markLoadingStarted(pageName: string, now: number = Date.now()): number {
+  const existing = globalLoadingStartTimes.get(pageName);
+  if (existing !== undefined) {
+    // If the entry is older than the stale threshold (or in future), an earlier navigation
+    // was abandoned. Expire it and reset to the fresh navigation timestamp.
+    if (now - existing > STALE_NAVIGATION_TTL_MS || now < existing) {
+      globalLoadingStartTimes.set(pageName, now);
+      return now;
+    }
+    return existing;
+  }
+  globalLoadingStartTimes.set(pageName, now);
+  return now;
+}
+
+export function clearLoadingStarted(pageName: string): void {
+  globalLoadingStartTimes.delete(pageName);
+}
+

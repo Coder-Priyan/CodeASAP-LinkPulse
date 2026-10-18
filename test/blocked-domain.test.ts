@@ -10,6 +10,7 @@ import {
   setClockForTesting,
   setCacheTtlForTesting,
   invalidateBlockedDomainCache,
+  BlockedDomainError,
 } from "@/lib/services/blocked-domain.service";
 import { createLink, updateLinkRules, evaluateLinkRules } from "@/lib/services/link.service";
 import { previewCsvImport } from "@/lib/services/csv-import.service";
@@ -593,6 +594,25 @@ describe("Milestone 4: Admin Domain Blocklist", () => {
       setClockForTesting(null);
       setCacheTtlForTesting(null);
       invalidateBlockedDomainCache();
+    }
+  });
+
+  it("catches Prisma P2002 unique constraint and throws BlockedDomainError with DUPLICATE_DOMAIN (409)", async () => {
+    const dupDomain = `dup-block-${Date.now()}.com`;
+    const first = await addBlockedDomain(dupDomain, adminUser.id, "First insertion");
+    createdBlockedDomainIds.push(first.id);
+
+    await expect(
+      addBlockedDomain(dupDomain, adminUser.id, "Duplicate attempt")
+    ).rejects.toThrowError(BlockedDomainError);
+
+    try {
+      await addBlockedDomain(dupDomain, adminUser.id, "Duplicate attempt");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(BlockedDomainError);
+      expect(err.code).toBe("DUPLICATE_DOMAIN");
+      expect(err.status).toBe(409);
+      expect(err.message).toBe("This domain is already in the blocklist.");
     }
   });
 });

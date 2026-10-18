@@ -9,9 +9,20 @@ import {
   LONG_WAIT_THRESHOLD_MS,
   computeLoadingState,
   LoadingCopy,
+  STALE_NAVIGATION_TTL_MS,
+  markLoadingStarted,
+  clearLoadingStarted,
 } from "@/lib/utils/loading-state";
 
-export { PAGE_PRESETS, LONG_WAIT_THRESHOLD_MS, DEFAULT_TIMEOUT_MS, computeLoadingState };
+export {
+  PAGE_PRESETS,
+  LONG_WAIT_THRESHOLD_MS,
+  DEFAULT_TIMEOUT_MS,
+  computeLoadingState,
+  STALE_NAVIGATION_TTL_MS,
+  markLoadingStarted,
+  clearLoadingStarted,
+};
 export type { LoadingCopy };
 
 export interface LoadingScreenProps {
@@ -22,19 +33,6 @@ export interface LoadingScreenProps {
   timeoutMs?: number;
   longWaitMs?: number;
   clock?: () => number;
-}
-
-const globalLoadingStartTimes = new Map<string, number>();
-
-export function markLoadingStarted(pageName: string): number {
-  if (!globalLoadingStartTimes.has(pageName)) {
-    globalLoadingStartTimes.set(pageName, Date.now());
-  }
-  return globalLoadingStartTimes.get(pageName)!;
-}
-
-export function clearLoadingStarted(pageName: string): void {
-  globalLoadingStartTimes.delete(pageName);
 }
 
 export function LoadingScreen({
@@ -55,10 +53,10 @@ export function LoadingScreen({
 
   useEffect(() => {
     const isCustomClock = clock !== Date.now;
-    const startTime = isCustomClock ? clock() : markLoadingStarted(pageName);
+    const now0 = clock();
+    const startTime = isCustomClock ? now0 : markLoadingStarted(pageName, now0);
 
-    const now = clock();
-    setElapsedMs(Math.max(0, now - startTime));
+    setElapsedMs(Math.max(0, now0 - startTime));
 
     const interval = setInterval(() => {
       const currentNow = clock();
@@ -70,7 +68,10 @@ export function LoadingScreen({
       }
     }, 150);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearLoadingStarted(pageName);
+    };
   }, [clock, timeoutMs, pageName]);
 
   const state = computeLoadingState({
