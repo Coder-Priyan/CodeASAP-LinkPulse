@@ -62,6 +62,8 @@ model Link {
 
   @@index([code])
   @@index([userId])
+  @@index([userId, createdAt])
+  @@index([userId, isActive])
   @@index([isActive])
   @@index([createdAt])
   @@index([campaignId])
