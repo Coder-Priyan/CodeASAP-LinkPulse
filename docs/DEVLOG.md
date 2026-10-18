@@ -1,6 +1,36 @@
 # LinkPulse Devlog
 
-### 2026-10-17 — Desktop Redesign Round 3 (Comprehensive Pass, ESLint & Truth In Copy)
+### 2026-10-18 — Major Improvement Pass Plan (Architecture, Quality, Performance & Security)
+- **Goal**: Take LinkPulse to a clearly superior level across backend, frontend, data layer, security, performance, tests, and documentation.
+- **Order of Execution & Risk Assessment**:
+  1. **Phase 1: Review Leftover Hardening & Validation (Low Risk)**:
+     - CSV bulk import: strictly verify in `executeCsvImport` and route handlers that `campaignId` and every item in `tagIds` belong to the authenticated `userId`. Reject with `403 FORBIDDEN` if a foreign or non-existent ID is passed.
+     - QR size parameter: in `qr.service.ts` and `[id]/qr/route.ts`, robustly sanitize size against `NaN`, empty strings, negative, or non-numeric inputs, falling back safely to default `360` (clamped between 120 and 2048). Verify and test that SVG and PNG at every size encode `?src=qr`.
+     - Link title editing & creation: enforce identical trim, max-length (255 characters), and empty-to-null rules across both `createLink` and `updateLinkRules`. Ensure `PATCH /api/links/[id]` enforces resource ownership. Add title input to `LinkCreateForm`.
+     - Risk: Low. Pure validation and consistency improvements with explicit test coverage.
+  2. **Phase 2: Test Suite Hardening & Live DB Safety (Low-Medium Risk)**:
+     - Replace hardcoded `example.com` in all test files with dynamic/unique unblocked domains (e.g. `https://safe-fixture-${Date.now()}.org/...`) to prevent collisions with the live Neon DB's `Manual Test` blocked-domain row.
+     - Ensure all newly created fixtures (links, tags, campaigns, users, blocked domains) are strictly cleaned up in `afterAll` blocks.
+     - Aim for 100% test pass rate without touching or altering live database records.
+     - Risk: Low. Improves test determinism and isolation without touching production data.
+  3. **Phase 3: High-Throughput Redirect & Performance Optimizations (Medium Risk)**:
+     - In-memory caching for `BlockedDomain` evaluation with TTL and mutation invalidation to eliminate 1-3 remote Neon round trips on every redirect in `/[code]`.
+     - Query optimization in `[code]/route.ts` and `analytics.service.ts`.
+     - Provide indexed schema migrations for high-frequency lookup columns (`ClickEvent(linkId, timestamp)`, `Link(userId, createdAt)`). Migration SQL will be created but NOT executed against the live DB.
+     - Risk: Medium. Must ensure cache consistency when admin adds/removes blocked domains.
+  4. **Phase 4: Security & Resilience Hardening (Low-Medium Risk)**:
+     - Verify strict input sanitation across all API endpoints (reject control characters, CRLF, and unescaped payloads).
+     - Protect all administrative endpoints with role-based checks and multi-tenant scoping.
+     - Ensure consistent JSON error formats (`400 Bad Request`, `403 Forbidden`, `422 Unprocessable Entity`).
+     - Risk: Low. Standard defensive engineering.
+  5. **Phase 5: UI/UX & Desktop Experience Polish (Low Risk)**:
+     - Add Campaign and Tag selectors to CSV Bulk Import page (`/import`) to match backend capabilities.
+     - Add title field to two-step link wizard in `LinkCreateForm.tsx`.
+     - Maintain strict neo-brutalist aesthetics, desktop-first responsiveness, and truthful telemetry.
+     - Risk: Low. Builds directly upon Rounds 1–3 design identity.
+  6. **Phase 6: Documentation & Verification (Zero Risk)**:
+     - Update `README.md`, `docs/DESIGN.md`, and `docs/DEVLOG.md` with real benchmark numbers, API changes, and testing instructions.
+
 - **What**: Executed Round 3 across all surfaces not covered or only partially touched in earlier rounds:
   - Redesign Pass:
     - Navbar: Responsive touch targets, clean session chip, role badges (`Admin` vs `User`), accessible aria-labels.

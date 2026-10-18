@@ -32,7 +32,7 @@ describe("1. Rule Evaluation Order", () => {
     const link = await db.link.create({
       data: {
         code: `test-rule-dis-exp-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: testUserId,
         isActive: false,
         disabledReason: "Manually deactivated",
@@ -53,7 +53,7 @@ describe("1. Rule Evaluation Order", () => {
     const link = await db.link.create({
       data: {
         code: `test-rule-exp-lim-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: testUserId,
         isActive: true,
         expiresAt: new Date(Date.now() - 3600000), // 1 hour ago
@@ -75,7 +75,7 @@ describe("1. Rule Evaluation Order", () => {
     const link = await db.link.create({
       data: {
         code: `test-rule-exp-pwd-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: testUserId,
         isActive: true,
         expiresAt: new Date(Date.now() - 3600000), // expired
@@ -98,7 +98,7 @@ describe("1. Rule Evaluation Order", () => {
     const link = await db.link.create({
       data: {
         code: `test-rule-lim-pwd-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: testUserId,
         isActive: true,
         clickLimit: 10,
@@ -120,7 +120,7 @@ describe("1. Rule Evaluation Order", () => {
     const link = await db.link.create({
       data: {
         code: `test-rule-pwd-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: testUserId,
         isActive: true,
         passwordHash: hashed,

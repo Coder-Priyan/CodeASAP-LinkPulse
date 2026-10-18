@@ -57,6 +57,19 @@ export interface LinkFilters {
   tagId?: string;
 }
 
+/**
+ * Trims, enforces max length (255 chars), and converts empty title strings to null.
+ */
+export function sanitizeLinkTitle(title?: string | null): string | null {
+  if (title === undefined || title === null) return null;
+  const trimmed = String(title).trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > 255) {
+    throw new LinkServiceError("Link title cannot exceed 255 characters.", "INVALID_TITLE", 422);
+  }
+  return trimmed;
+}
+
 export interface TagSummary {
   id: string;
   name: string;
@@ -340,24 +353,45 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
     passwordHash = await bcrypt.hash(password, 12);
   }
 
-  // 6. Verify Campaign ownership if provided
+  // 6. Sanitize and validate title if provided
+  const cleanTitle = sanitizeLinkTitle(title);
+
+  // 7. Verify Campaign ownership if provided
   let validCampaignId: string | null = null;
   if (campaignId) {
     const camp = await db.campaign.findUnique({
       where: { id: campaignId },
       select: { id: true, userId: true },
     });
-    if (camp && camp.userId === userId) {
-      validCampaignId = camp.id;
+    if (!camp || camp.userId !== userId) {
+      throw new LinkServiceError("Campaign does not exist or access denied.", "FORBIDDEN", 403);
     }
+    validCampaignId = camp.id;
   }
 
-  // 7. Create the link entity with relations
+  // 8. Verify Tag ownership if provided
+  let validTagIds: string[] = [];
+  if (tagIds && tagIds.length > 0) {
+    const uniqueTagIds = Array.from(new Set(tagIds));
+    const userTags = await db.tag.findMany({
+      where: {
+        id: { in: uniqueTagIds },
+        userId,
+      },
+      select: { id: true },
+    });
+    if (userTags.length !== uniqueTagIds.length) {
+      throw new LinkServiceError("One or more tags do not exist or access denied.", "FORBIDDEN", 403);
+    }
+    validTagIds = uniqueTagIds;
+  }
+
+  // 9. Create the link entity with relations
   const link = await db.link.create({
     data: {
       code: finalCode,
       destinationUrl: cleanUrl,
-      title: title ? title.trim() : null,
+      title: cleanTitle,
       userId,
       isActive: true,
       expiresAt: parsedExpiry,
@@ -365,8 +399,8 @@ export async function createLink(input: CreateLinkInput): Promise<LinkWithStats>
       passwordHash,
       clicksCount: 0,
       campaignId: validCampaignId,
-      tags: tagIds && tagIds.length > 0 ? {
-        create: tagIds.map((tagId) => ({ tagId })),
+      tags: validTagIds.length > 0 ? {
+        create: validTagIds.map((tagId) => ({ tagId })),
       } : undefined,
     },
     include: {
@@ -653,7 +687,7 @@ export async function updateLinkRules(
   const updateData: Prisma.LinkUpdateInput = {};
 
   if (input.title !== undefined) {
-    updateData.title = input.title && input.title.trim() ? input.title.trim() : null;
+    updateData.title = sanitizeLinkTitle(input.title);
   }
 
   if (input.destinationUrl !== undefined) {

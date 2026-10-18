@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth/guard";
 import { executeCsvImport } from "@/lib/services/csv-import.service";
 import { RateLimitError } from "@/lib/services/rate-limiter";
+import { LinkServiceError } from "@/lib/services/link.service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,6 +66,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: error.message, retryAfter: error.retryAfterSeconds },
         { status: 429 }
+      );
+    }
+    if (error instanceof LinkServiceError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
       );
     }
     return NextResponse.json(

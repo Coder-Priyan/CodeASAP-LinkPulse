@@ -1,7 +1,7 @@
 import { validateUrl } from "../validations/url-validator";
 import { validateCustomAlias } from "../validations/alias-validator";
 import { isDomainBlocked } from "./blocked-domain.service";
-import { createLink } from "./link.service";
+import { createLink, LinkServiceError } from "./link.service";
 import { checkBulkImportRateLimit } from "./rate-limiter";
 import { db } from "../db";
 
@@ -302,6 +302,32 @@ export async function executeCsvImport(
 ): Promise<CsvImportSummary> {
   // 1. Enforce bulk import rate limit (e.g. 10 bulk imports per hour per user)
   await checkBulkImportRateLimit(userId);
+
+  // 1b. Verify campaign ownership if provided
+  if (options?.campaignId) {
+    const campaign = await db.campaign.findUnique({
+      where: { id: options.campaignId },
+      select: { id: true, userId: true },
+    });
+    if (!campaign || campaign.userId !== userId) {
+      throw new LinkServiceError("Campaign does not exist or access denied.", "FORBIDDEN", 403);
+    }
+  }
+
+  // 1c. Verify tag ownership if provided
+  if (options?.tagIds && options.tagIds.length > 0) {
+    const uniqueTagIds = Array.from(new Set(options.tagIds));
+    const userTags = await db.tag.findMany({
+      where: {
+        id: { in: uniqueTagIds },
+        userId,
+      },
+      select: { id: true },
+    });
+    if (userTags.length !== uniqueTagIds.length) {
+      throw new LinkServiceError("One or more tags do not exist or access denied.", "FORBIDDEN", 403);
+    }
+  }
 
   // 2. Preview and validate rows
   const preview = await previewCsvImport(csvContent, userId);

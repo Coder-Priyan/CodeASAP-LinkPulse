@@ -58,7 +58,7 @@ describe("7. Rate Limiting", () => {
     const link = await db.link.create({
       data: {
         code: `test-rl-link-${Date.now()}`,
-        destinationUrl: "https://example.com/dest",
+        destinationUrl: "https://pulse-safe-test-target.org/dest",
         userId: testUserId,
       },
     });
@@ -88,7 +88,7 @@ describe("7. Rate Limiting", () => {
         const l = await db.link.create({
           data: {
             code: `rl-fill-${i}-${Date.now()}`,
-            destinationUrl: `https://example.com/${i}`,
+            destinationUrl: `https://pulse-safe-test-target.org/${i}`,
             userId: testUserId,
           },
         });
@@ -101,7 +101,7 @@ describe("7. Rate Limiting", () => {
       const fifteenthLink = await db.link.create({
         data: {
           code: `rl-fill-14-${Date.now()}`,
-          destinationUrl: "https://example.com/14",
+          destinationUrl: "https://pulse-safe-test-target.org/14",
           userId: testUserId,
         },
       });
@@ -123,7 +123,7 @@ describe("7. Rate Limiting", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          destinationUrl: "https://example.com/bypass-attempt",
+          destinationUrl: "https://pulse-safe-test-target.org/bypass-attempt",
           skipRateLimit: true, // Malicious client attempt to bypass rate limiter
         }),
       });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth/guard";
 import { db } from "@/lib/db";
 import { Role } from "@prisma/client";
-import { getQrTargetUrl, generateQrPng, generateQrSvg } from "@/lib/services/qr.service";
+import { getQrTargetUrl, generateQrPng, generateQrSvg, normalizeQrSize } from "@/lib/services/qr.service";
 
 export async function GET(
   request: NextRequest,
@@ -34,13 +34,7 @@ export async function GET(
     const format = searchParams.get("format") === "svg" ? "svg" : "png";
     const isDownload = searchParams.get("download") === "true";
     const rawSize = searchParams.get("size") || searchParams.get("width");
-    let size = 360;
-    if (rawSize) {
-      const parsed = parseInt(rawSize, 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        size = Math.min(2048, Math.max(120, parsed));
-      }
-    }
+    const size = normalizeQrSize(rawSize);
 
     const targetUrl = getQrTargetUrl(link.code);
 

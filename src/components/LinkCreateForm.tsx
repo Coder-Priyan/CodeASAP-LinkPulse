@@ -70,6 +70,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
 
   // Step 1 fields
+  const [title, setTitle] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
   const [customAlias, setCustomAlias] = useState("");
 
@@ -248,6 +249,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title: title.trim() || undefined,
           destinationUrl: destinationUrl.trim(),
           customAlias: customAlias.trim() || undefined,
           expiresAt: expiresAt || null,
@@ -272,6 +274,7 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
       });
 
       // Reset form
+      setTitle("");
       setDestinationUrl("");
       setCustomAlias("");
       setExpiresAt("");
@@ -383,6 +386,22 @@ export function LinkCreateForm({ onSuccess }: LinkCreateFormProps) {
       {step === 1 && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem", alignItems: "flex-start" }}>
+            <div className="form-group" style={{ marginBottom: "0.75rem", gridColumn: "1 / -1" }}>
+              <label className="form-label" htmlFor="linkTitle">
+                Link Title <span style={{ fontWeight: 400, color: "var(--color-muted)" }}>(Optional)</span>
+              </label>
+              <input
+                id="linkTitle"
+                type="text"
+                className="form-input"
+                placeholder="e.g. Marketing Campaign Landing Page"
+                value={title}
+                maxLength={255}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <span className="form-hint">A clear label for tables, analytics, and team identification (max 255 chars)</span>
+            </div>
+
             <div className="form-group" style={{ marginBottom: "0.75rem" }}>
               <label className="form-label" htmlFor="destUrl">
                 Destination URL <span style={{ color: "var(--color-text-danger)" }}>*</span>

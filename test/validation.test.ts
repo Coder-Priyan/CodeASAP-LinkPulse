@@ -103,7 +103,7 @@ describe("4. URL and Alias Validation", () => {
 
       // Create first link
       const link1 = await createLink({
-        destinationUrl: "https://example.com/one",
+        destinationUrl: "https://pulse-safe-test-target.org/one",
         customAlias: alias,
         userId: testUserId,
       });
@@ -113,7 +113,7 @@ describe("4. URL and Alias Validation", () => {
       // Attempt to create second link with same alias
       await expect(
         createLink({
-          destinationUrl: "https://example.com/two",
+          destinationUrl: "https://pulse-safe-test-target.org/two",
           customAlias: alias,
           userId: testUserId,
         })
@@ -121,7 +121,7 @@ describe("4. URL and Alias Validation", () => {
 
       try {
         await createLink({
-          destinationUrl: "https://example.com/two",
+          destinationUrl: "https://pulse-safe-test-target.org/two",
           customAlias: alias,
           userId: testUserId,
         });

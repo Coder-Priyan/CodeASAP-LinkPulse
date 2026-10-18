@@ -225,6 +225,7 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved }: EditLinkModalP
               className="form-input"
               placeholder="e.g. Marketing Landing Page"
               value={title}
+              maxLength={255}
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>

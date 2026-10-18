@@ -50,7 +50,7 @@ describe("5. Privacy-Safe Unique Visitor Tracking", () => {
     const link = await db.link.create({
       data: {
         code: `test-uniq-${Date.now()}`,
-        destinationUrl: "https://example.com/unique-dest",
+        destinationUrl: "https://pulse-safe-test-target.org/unique-dest",
         userId: testUserId,
         clicksCount: 4,
       },
