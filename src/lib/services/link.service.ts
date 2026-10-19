@@ -197,7 +197,7 @@ export async function evaluateLinkRules(
     if (!providedPassword) {
       return {
         status: "PASSWORD_REQUIRED",
-        reason: "A password is required to access this destination.",
+        reason: "A passcode is required to access this destination.",
       };
     }
 
@@ -205,7 +205,7 @@ export async function evaluateLinkRules(
     if (!isValid) {
       return {
         status: "INVALID_PASSWORD",
-        reason: "Incorrect password entered.",
+        reason: "Incorrect passcode entered.",
       };
     }
   }

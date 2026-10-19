@@ -1,19 +1,20 @@
 -- Suggested Index Optimization for Analytics SQL Aggregation (PERF-01)
 --
 -- RATIONALE:
--- The analytics aggregation query joins "ClickEvent" with "Link" and filters on:
---   1. "ce"."timestamp" >= $since (date range boundary)
---   2. "l"."userId" = $userId (or platform-wide)
+-- Analytics aggregation queries join "ClickEvent" with "Link" and filter on:
+--   1. Equality/In-list on "ce"."linkId" = "l"."id" (matching links for userId / campaignId)
+--   2. Range filter on "ce"."timestamp" >= $since
 --
--- While an index on "ClickEvent"("linkId", "timestamp" DESC) exists for single-link lookups,
--- cross-link aggregation across a user's entire account performs an index scan on timestamp.
+-- Relational indexing best practice requires equality columns first, followed by range columns.
+-- Placing "linkId" as the leading column allows PostgreSQL to perform direct B-tree index seeks
+-- on each target linkId and then narrow down the date range on "timestamp" without scanning
+-- unrelated links across the entire database.
 --
--- Adding a composite index on ("timestamp", "linkId") allows PostgreSQL to perform an index
--- range scan on timestamp >= $since and resolve linkId directly from the index tuple without
--- fetching heap pages, enabling Index-Only Scans for high-volume telemetry tables.
---
--- NOTE: Do NOT apply this migration to active databases without a scheduled maintenance window.
--- When executing on production PostgreSQL / Neon, use CREATE INDEX CONCURRENTLY to prevent locking.
+-- NOTE: An index on ("linkId", "timestamp" DESC) is already declared in schema.prisma:
+--   @@index([linkId, timestamp(sort: Desc)], map: "ClickEvent_linkId_timestamp_desc_idx")
+-- and in migration 20261018120000_performance_indexes.
+-- Do NOT apply this migration if "ClickEvent_linkId_timestamp_desc_idx" has already been applied.
+-- When executing on production PostgreSQL / Neon, use CREATE INDEX CONCURRENTLY to prevent table locking.
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "ClickEvent_timestamp_linkId_idx" 
-ON "ClickEvent"("timestamp", "linkId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "ClickEvent_linkId_timestamp_idx" 
+ON "ClickEvent"("linkId", "timestamp");
