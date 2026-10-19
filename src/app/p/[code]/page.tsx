@@ -26,7 +26,7 @@ function PasswordChallengeContent() {
     setError(null);
 
     if (!password.trim()) {
-      setError("Please enter the password.");
+      setError("Please enter the passcode.");
       return;
     }
 
@@ -46,7 +46,7 @@ function PasswordChallengeContent() {
           router.push(`/link-status?code=${encodeURIComponent(code)}&status=${data.status}`);
           return;
         }
-        throw new Error(data.error || "Incorrect password.");
+        throw new Error(data.error || "Incorrect passcode.");
       }
 
       if (data.destinationUrl) {
@@ -58,7 +58,7 @@ function PasswordChallengeContent() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to verify password.");
+        setError("Failed to verify passcode.");
       }
       setLoading(false);
     }
@@ -85,12 +85,12 @@ function PasswordChallengeContent() {
         </div>
 
         <h1 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: "0.4rem", fontFamily: "var(--font-display)" }}>
-          Password Protected Link
+          Passcode Protected Link
         </h1>
 
         <p style={{ color: "var(--color-ink-muted)", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
           The link <code className="code-badge">/{code}</code> requires
-          a password before redirecting to its destination.
+          a passcode before redirecting to its destination.
         </p>
 
         {error && (

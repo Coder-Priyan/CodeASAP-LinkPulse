@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { LinkItem } from "./LinksTable";
 import { X, Save, Clock, Gauge, Lock, AlertCircle, Globe, Layers, Tag as TagIcon, Sliders, Copy, Check, RefreshCw } from "lucide-react";
 import { buildShortUrl } from "@/lib/utils/short-url";
+import { copyToClipboard } from "@/lib/utils/clipboard";
+import { toast } from "./Toast";
 
 interface EditLinkModalProps {
   link: LinkItem;
@@ -113,10 +115,15 @@ export function EditLinkModal({ link, isOpen, onClose, onSaved, onError }: EditL
 
   const shortUrl = buildShortUrl(link.code);
 
-  const handleCopyShortUrl = () => {
-    navigator.clipboard.writeText(shortUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyShortUrl = async () => {
+    const success = await copyToClipboard(shortUrl);
+    if (success) {
+      setCopied(true);
+      toast.success(`Copied short link to clipboard: ${shortUrl}`);
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.error("Failed to copy link. Please allow clipboard permissions.");
+    }
   };
 
   const toggleTag = (id: string) => {

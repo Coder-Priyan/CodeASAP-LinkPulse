@@ -47,7 +47,10 @@ https://github.com/Coder-Priyan/LinkPulse,linkpulse-repo,LinkPulse Repository
 https://nextjs.org/docs,nextjs-docs,Next.js Documentation
 https://prisma.io/docs,prisma-docs,Prisma ORM Guides`;
 
+import { useRouter } from "next/navigation";
+
 export default function CsvImportPage() {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [csvContent, setCsvContent] = useState<string>("");
   const [previewRows, setPreviewRows] = useState<CsvRowPreview[]>([]);
@@ -64,6 +67,21 @@ export default function CsvImportPage() {
   useEffect(() => {
     document.title = "CSV Import | LinkPulse";
 
+    fetch("/api/auth/me")
+      .then((res) => {
+        if (res.status === 401) {
+          router.push("/login");
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data && !data.user) {
+          router.push("/login");
+        }
+      })
+      .catch(() => {});
+
     fetch("/api/campaigns")
       .then((res) => res.json())
       .then((data) => setCampaigns(data.campaigns || []))
@@ -73,7 +91,7 @@ export default function CsvImportPage() {
       .then((res) => res.json())
       .then((data) => setTags(data.tags || []))
       .catch(() => {});
-  }, []);
+  }, [router]);
 
   const handleDownloadTemplate = () => {
     const blob = new Blob([SAMPLE_CSV], { type: "text/csv;charset=utf-8;" });

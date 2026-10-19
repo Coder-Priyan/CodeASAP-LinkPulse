@@ -81,39 +81,48 @@ export default function AnalyticsPage() {
           fetch(`/api/analytics?${params.toString()}`),
         ]);
 
-        if (meRes.status === 401) {
+        // If unauthenticated (detected via 401 on auth or protected endpoints), redirect to login
+        if (meRes.status === 401 || campRes.status === 401 || analyticsRes.status === 401) {
           router.push("/login");
           return;
         }
 
-        if (!meRes.ok || !campRes.ok || !analyticsRes.ok) {
-          throw new Error("One or more analytics requests failed.");
-        }
-
-        const [meData, campData, analyticsData] = await Promise.all([
-          meRes.json(),
-          campRes.json(),
-          analyticsRes.json(),
-        ]);
-
-        if (!meData.user) {
-          router.push("/login");
-          return;
-        }
-
-        // Smooth anti-flash minimum display time for initial load (320ms)
-        if (isInitial) {
-          const elapsed = Date.now() - startTime;
-          if (elapsed < 320) {
-            await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+        // If auth endpoint returned OK, check if a valid session exists
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (!meData.user) {
+            router.push("/login");
+            return;
           }
+
+          // User is logged in: now verify other analytics dependencies succeeded
+          if (!campRes.ok || !analyticsRes.ok) {
+            throw new Error("One or more analytics requests failed.");
+          }
+
+          const [campData, analyticsData] = await Promise.all([
+            campRes.json(),
+            analyticsRes.json(),
+          ]);
+
+          // Smooth anti-flash minimum display time for initial load (320ms)
+          if (isInitial) {
+            const elapsed = Date.now() - startTime;
+            if (elapsed < 320) {
+              await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+            }
+          }
+
+          setUser(meData.user);
+          setCampaigns(campData.campaigns || []);
+          setReport(analyticsData.report || null);
+          clearLoadingStarted("analytics");
+          setInitialLoading(false);
+          return;
         }
 
-        setUser(meData.user);
-        setCampaigns(campData.campaigns || []);
-        setReport(analyticsData.report || null);
-        clearLoadingStarted("analytics");
-        setInitialLoading(false);
+        // Auth endpoint failed with a non-401 error (e.g. 500)
+        throw new Error("Authentication verification failed.");
       } catch (err) {
         console.error("Failed to load analytics:", err);
         if (isInitial) {

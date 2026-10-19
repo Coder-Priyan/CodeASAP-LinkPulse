@@ -21,11 +21,15 @@ import {
   X,
   Sparkles,
   RefreshCw,
+  Plus,
 } from "lucide-react";
 import { EditLinkModal } from "./EditLinkModal";
 import { QrModal } from "./QrModal";
 import { PulseMascot } from "./PulseMascot";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { toast } from "./Toast";
 import { buildShortUrl } from "@/lib/utils/short-url";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 
 export type ComputedLinkState = "active" | "expired" | "limit_reached" | "disabled";
 
@@ -55,14 +59,28 @@ export interface LinkItem {
   };
 }
 
+export interface LinksTablePagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (newPage: number) => void;
+}
+
 interface LinksTableProps {
   links: LinkItem[];
   isAdminView?: boolean;
   onRefresh: () => void;
   loading?: boolean;
+  pagination?: LinksTablePagination;
 }
 
-export function LinksTable({ links, isAdminView = false, onRefresh, loading = false }: LinksTableProps) {
+export function LinksTable({
+  links,
+  isAdminView = false,
+  onRefresh,
+  loading = false,
+  pagination,
+}: LinksTableProps) {
   const [displayLinks, setDisplayLinks] = useState<LinkItem[]>(links);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -71,6 +89,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [deleteConfirmLink, setDeleteConfirmLink] = useState<LinkItem | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -122,20 +141,21 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
   }, []);
 
   const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((current) => (current === msg ? null : current));
-    }, 2400);
+    toast.success(msg);
   };
 
   const getFullShortUrl = (code: string) => buildShortUrl(code);
 
-  const handleCopy = (id: string, code: string) => {
+  const handleCopy = async (id: string, code: string) => {
     const url = getFullShortUrl(code);
-    navigator.clipboard.writeText(url);
-    setCopiedId(id);
-    showToast(`Copied short link to clipboard: ${url}`);
-    setTimeout(() => setCopiedId(null), 2000);
+    const copied = await copyToClipboard(url);
+    if (copied) {
+      setCopiedId(id);
+      toast.success(`Copied short link to clipboard: ${url}`);
+      setTimeout(() => setCopiedId(null), 2000);
+    } else {
+      toast.error("Failed to copy link. Please allow clipboard permissions.");
+    }
   };
 
   const toggleRowExpand = (id: string) => {
@@ -174,9 +194,9 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
             l.id === link.id ? { ...l, isActive: originalStatus, state: originalState } : l
           )
         );
-        alert(data.error || "Failed to update link status");
+        toast.error(data.error || "Failed to update link status");
       } else {
-        showToast(`Route /${link.code} is now ${newStatus ? "active" : "disabled"}.`);
+        toast.success(`Route /${link.code} is now ${newStatus ? "active" : "disabled"}.`);
       }
     } catch {
       // Rollback on network error
@@ -185,26 +205,23 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
           l.id === link.id ? { ...l, isActive: originalStatus, state: originalState } : l
         )
       );
-      alert("Error connecting to server.");
+      toast.error("Error connecting to server.");
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  const handleDelete = async (linkId: string) => {
-    if (!confirm("Are you sure you want to delete this link? All associated click logs will also be permanently deleted.")) {
-      return;
-    }
+  const promptDelete = (link: LinkItem) => {
+    setDeleteConfirmLink(link);
+  };
 
-    const itemToDelete = displayLinks.find((l) => l.id === linkId);
-    if (!itemToDelete) return;
-
+  const executeDelete = async (itemToDelete: LinkItem) => {
     // 1. Optimistic immediate removal (0ms perceived latency)
-    setDisplayLinks((prev) => prev.filter((l) => l.id !== linkId));
-    setActionLoadingId(linkId);
+    setDisplayLinks((prev) => prev.filter((l) => l.id !== itemToDelete.id));
+    setActionLoadingId(itemToDelete.id);
 
     try {
-      const res = await fetch(`/api/links/${linkId}`, {
+      const res = await fetch(`/api/links/${itemToDelete.id}`, {
         method: "DELETE",
       });
 
@@ -212,14 +229,14 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
         const data = await res.json();
         // Rollback on failure
         setDisplayLinks((prev) => [itemToDelete, ...prev]);
-        alert(data.error || "Failed to delete link.");
+        toast.error(data.error || "Failed to delete link.");
       } else {
-        showToast("Link successfully deleted.");
+        toast.success("Link successfully deleted.");
       }
     } catch {
       // Rollback on network error
       setDisplayLinks((prev) => [itemToDelete, ...prev]);
-      alert("Error connecting to server.");
+      toast.error("Error connecting to server.");
     } finally {
       setActionLoadingId(null);
     }
@@ -289,6 +306,17 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
   }
 
   if (displayLinks.length === 0) {
+    const handleScrollToCreate = () => {
+      const destInput = document.getElementById("destUrl") || document.getElementById("linkTitle");
+      if (destInput) {
+        destInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        destInput.focus();
+      } else {
+        const createSection = document.getElementById("create-link-section");
+        createSection?.scrollIntoView({ behavior: "smooth" });
+      }
+    };
+
     return (
       <div className="card" style={{ padding: "3rem 2rem", textAlign: "center", backgroundColor: "var(--color-white)" }}>
         <div style={{ display: "inline-flex", justifyContent: "center", marginBottom: "1.25rem" }}>
@@ -297,11 +325,24 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
         <h3 style={{ fontSize: "1.75rem", fontFamily: "var(--font-display)", marginBottom: "0.5rem" }}>
           {isAdminView ? "System Link Directory is Empty" : "Welcome to your Link Cockpit"}
         </h3>
-        <p style={{ color: "var(--color-muted)", fontSize: "1.05rem", maxWidth: "540px", margin: "0 auto 1.75rem", fontWeight: 600 }}>
+        <p style={{ color: "var(--color-muted)", fontSize: "1.05rem", maxWidth: "540px", margin: "0 auto 1.5rem", fontWeight: 600 }}>
           {isAdminView
             ? "No links have been registered by any user in the database yet."
             : "Shorten long URLs with custom aliases, track real visitor clicks, and generate print-ready QR codes."}
         </p>
+
+        {!isAdminView && (
+          <div style={{ marginBottom: "2rem" }}>
+            <button
+              type="button"
+              onClick={handleScrollToCreate}
+              className="btn btn-primary inline-flex items-center gap-2"
+            >
+              <Plus size={18} strokeWidth={2.5} />
+              <span>Create Your First Link</span>
+            </button>
+          </div>
+        )}
 
         {!isAdminView && (
           <div className="onboarding-grid" style={{ maxWidth: "800px", margin: "0 auto", textAlign: "left" }}>
@@ -566,7 +607,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
 
                     {/* Original Destination */}
                     <td>
-                      <div className="flex items-center gap-1.5" style={{ maxWidth: "200px" }}>
+                      <div className="flex items-center gap-1.5" style={{ minWidth: "160px", maxWidth: "clamp(200px, 28vw, 420px)" }}>
                         <a
                           href={link.destinationUrl}
                           target="_blank"
@@ -576,7 +617,8 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                             color: "var(--color-ink)",
                             fontSize: "0.875rem",
                             fontWeight: 600,
-                            maxWidth: "180px",
+                            flex: "1 1 auto",
+                            minWidth: 0,
                             display: "inline-block",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
@@ -770,7 +812,7 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
 
                         <button
                           type="button"
-                          onClick={() => handleDelete(link.id)}
+                          onClick={() => promptDelete(link)}
                           disabled={isLoading}
                           className="btn btn-danger btn-sm table-action-btn"
                           title="Permanently delete link"
@@ -785,6 +827,62 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {pagination && pagination.total > 0 && (
+        <div
+          className="flex items-center justify-between"
+          style={{
+            marginTop: "1.25rem",
+            padding: "0.75rem 1.25rem",
+            backgroundColor: "var(--color-paper)",
+            border: "var(--border-thick)",
+            borderRadius: "var(--radius-md)",
+            boxShadow: "var(--shadow-soft)",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+          }}
+        >
+          <div style={{ color: "var(--color-muted)" }}>
+            Showing{" "}
+            <strong style={{ color: "var(--color-ink)" }}>
+              {(pagination.page - 1) * pagination.pageSize + 1}
+            </strong>{" "}
+            to{" "}
+            <strong style={{ color: "var(--color-ink)" }}>
+              {Math.min(pagination.page * pagination.pageSize, pagination.total)}
+            </strong>{" "}
+            of{" "}
+            <strong style={{ color: "var(--color-ink)" }}>{pagination.total}</strong> links
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: "0.4rem 0.85rem", fontSize: "0.825rem", fontWeight: 700 }}
+              disabled={pagination.page <= 1 || loading}
+              onClick={() => pagination.onPageChange(pagination.page - 1)}
+            >
+              Previous
+            </button>
+            <span style={{ padding: "0 0.5rem", color: "var(--color-muted)" }}>
+              Page <strong style={{ color: "var(--color-ink)" }}>{pagination.page}</strong> of{" "}
+              <strong style={{ color: "var(--color-ink)" }}>
+                {Math.max(1, Math.ceil(pagination.total / pagination.pageSize))}
+              </strong>
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: "0.4rem 0.85rem", fontSize: "0.825rem", fontWeight: 700 }}
+              disabled={pagination.page * pagination.pageSize >= pagination.total || loading}
+              onClick={() => pagination.onPageChange(pagination.page + 1)}
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 
@@ -856,9 +954,13 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(expLink.destinationUrl);
-                          showToast("Copied destination target URL to clipboard!");
+                        onClick={async () => {
+                          const success = await copyToClipboard(expLink.destinationUrl);
+                          if (success) {
+                            toast.success("Copied destination target URL to clipboard!");
+                          } else {
+                            toast.error("Failed to copy destination URL. Please allow clipboard permissions.");
+                          }
                         }}
                         className="btn btn-secondary btn-sm"
                       >
@@ -1004,6 +1106,23 @@ export function LinksTable({ links, isAdminView = false, onRefresh, loading = fa
           link={qrModalLink}
           isOpen={true}
           onClose={() => setQrModalLink(null)}
+        />
+      )}
+
+      {deleteConfirmLink && (
+        <ConfirmDialog
+          isOpen={true}
+          title="Delete Link"
+          message={`Are you sure you want to delete /${deleteConfirmLink.code}? All associated click logs will also be permanently deleted.`}
+          confirmLabel="Delete link"
+          cancelLabel="Cancel"
+          variant="danger"
+          onConfirm={async () => {
+            const link = deleteConfirmLink;
+            setDeleteConfirmLink(null);
+            await executeDelete(link);
+          }}
+          onCancel={() => setDeleteConfirmLink(null)}
         />
       )}
     </>

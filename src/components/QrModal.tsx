@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { LinkItem } from "./LinksTable";
 import { X, Download, QrCode as QrIcon, ExternalLink, Copy, Check } from "lucide-react";
 import { buildShortUrl } from "@/lib/utils/short-url";
+import { copyToClipboard } from "@/lib/utils/clipboard";
+import { toast } from "@/components/Toast";
 
 interface QrModalProps {
   link: LinkItem;
@@ -72,10 +74,15 @@ export function QrModal({ link, isOpen, onClose }: QrModalProps) {
   const pngDownloadUrl = `/api/links/${link.id}/qr?format=png&download=true&size=1024`;
   const svgDownloadUrl = `/api/links/${link.id}/qr?format=svg&download=true`;
 
-  const handleCopyTarget = () => {
-    navigator.clipboard.writeText(plainShortUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyTarget = async () => {
+    const success = await copyToClipboard(plainShortUrl);
+    if (success) {
+      setCopied(true);
+      toast.success("Short link copied to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.error("Could not copy link automatically. Please copy it manually.");
+    }
   };
 
   return (

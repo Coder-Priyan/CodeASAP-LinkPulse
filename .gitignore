@@ -25,7 +25,16 @@ yarn-error.log*
 # Local environment files
 .env*.local
 .env
+Passwords/
 
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Audit and Reports
+ui-audit-screenshots/
+UI_AUDIT.md
+*_REPORT.md
+AUDIT_*.md
+UI_*.md
+

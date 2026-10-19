@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { buildShortUrl } from "@/lib/utils/short-url";
 import { LinkItem } from "./LinksTable";
+import { toast } from "@/components/Toast";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 
 interface LinkCreateFormProps {
   onSuccess: (newLink?: LinkItem) => void;
@@ -161,11 +163,12 @@ export function LinkCreateForm({
         setNewCampaignName("");
         setShowNewCampaign(false);
         onCampaignCreated?.(data.campaign);
+        toast.success(`Campaign "${data.campaign.name}" created.`);
       } else {
-        alert(data.error || "Failed to create campaign.");
+        toast.error(data.error || "Failed to create campaign.");
       }
     } catch {
-      alert("Error creating campaign.");
+      toast.error("Error connecting to server to create campaign.");
     }
   };
 
@@ -184,11 +187,12 @@ export function LinkCreateForm({
         setNewTagName("");
         setShowNewTag(false);
         onTagCreated?.(data.tag);
+        toast.success(`Tag "#${data.tag.name}" created.`);
       } else {
-        alert(data.error || "Failed to create tag.");
+        toast.error(data.error || "Failed to create tag.");
       }
     } catch {
-      alert("Error creating tag.");
+      toast.error("Error connecting to server to create tag.");
     }
   };
 
@@ -385,15 +389,20 @@ export function LinkCreateForm({
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!createdLink) return;
-    navigator.clipboard.writeText(createdLink.shortUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const success = await copyToClipboard(createdLink.shortUrl);
+    if (success) {
+      setCopied(true);
+      toast.success("Copied short link to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.error("Could not copy link automatically. Please copy it manually.");
+    }
   };
 
   return (
-    <div className="card" style={{ marginBottom: "2rem" }}>
+    <div id="create-link-section" className="card" style={{ marginBottom: "2rem" }}>
       {/* Header and Step Indicators */}
       <div style={{ marginBottom: "1.75rem" }}>
         <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: "1rem", marginBottom: "0.5rem" }}>

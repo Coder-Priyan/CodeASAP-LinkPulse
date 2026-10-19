@@ -414,6 +414,38 @@ All scripts are completely credential-free: they read configuration from environ
 
 ---
 
+## Testing & Database Safety Guard
+
+To protect development and live Neon databases from destructive teardown cleanups, LinkPulse enforces a Vitest `globalSetup` safety guard. Executing `npm test` will fail fast with an explanatory error unless `TEST_DATABASE_URL` is explicitly provided and differs from `DATABASE_URL`.
+
+### Setting up an Isolated Test Database
+
+#### Option 1: Local Docker PostgreSQL (Recommended)
+```bash
+# 1. Launch isolated PostgreSQL container on port 5433
+docker run --name linkpulse-test-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=linkpulse_test -p 5433:5432 -d postgres:16-alpine
+
+# 2. Push schema to the test database
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/linkpulse_test?schema=public" npx prisma db push
+
+# 3. Run the test suite
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5433/linkpulse_test?schema=public" npm test
+```
+
+#### Option 2: Dedicated Neon Test Branch
+```bash
+# 1. Create a dedicated test branch in the Neon console (isolated from main/dev)
+# 2. Push schema to the branch
+DATABASE_URL="postgresql://[user]:[password]@ep-test-branch.aws.neon.tech/linkpulse?sslmode=require" npx prisma db push
+
+# 3. Execute test suite
+TEST_DATABASE_URL="postgresql://[user]:[password]@ep-test-branch.aws.neon.tech/linkpulse?sslmode=require" npm test
+```
+
+See `.env.test.example` for reference connection strings.
+
+---
+
 ## Deployment
 
 Live link: to be added.
