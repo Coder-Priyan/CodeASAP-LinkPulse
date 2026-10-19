@@ -96,7 +96,8 @@ export async function GET(
         void recordClick(link.id, { userAgent, referrer, ip, source });
       }
     } catch (err) {
-      console.error("[RedirectRoute] Logging dispatch error:", err);
+      // Fallback if after() is invoked outside request scope
+      void recordClick(link.id, { userAgent, referrer, ip, source });
     }
   }
 

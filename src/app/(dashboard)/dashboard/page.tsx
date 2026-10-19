@@ -82,41 +82,50 @@ export default function DashboardPage() {
           fetch(`/api/links?${params.toString()}`),
         ]);
 
-        if (meRes.status === 401) {
+        // If unauthenticated (detected via 401 on auth or protected endpoints), redirect to login
+        if (meRes.status === 401 || campRes.status === 401 || tagRes.status === 401 || linksRes.status === 401) {
           router.push("/login");
           return;
         }
 
-        if (!meRes.ok || !campRes.ok || !tagRes.ok || !linksRes.ok) {
-          throw new Error("One or more dashboard requests failed.");
-        }
-
-        const [meData, campData, tagData, linksData] = await Promise.all([
-          meRes.json(),
-          campRes.json(),
-          tagRes.json(),
-          linksRes.json(),
-        ]);
-
-        if (!meData.user) {
-          router.push("/login");
-          return;
-        }
-
-        // Smooth anti-flash minimum display time for initial load (320ms)
-        if (isInitial) {
-          const elapsed = Date.now() - startTime;
-          if (elapsed < 320) {
-            await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+        // If auth endpoint returned OK, check if a valid session exists
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (!meData.user) {
+            router.push("/login");
+            return;
           }
+
+          // User is logged in: now verify other dashboard dependencies succeeded
+          if (!campRes.ok || !tagRes.ok || !linksRes.ok) {
+            throw new Error("One or more dashboard requests failed.");
+          }
+
+          const [campData, tagData, linksData] = await Promise.all([
+            campRes.json(),
+            tagRes.json(),
+            linksRes.json(),
+          ]);
+
+          // Smooth anti-flash minimum display time for initial load (320ms)
+          if (isInitial) {
+            const elapsed = Date.now() - startTime;
+            if (elapsed < 320) {
+              await new Promise((resolve) => setTimeout(resolve, 320 - elapsed));
+            }
+          }
+
+          setUser(meData.user);
+          setCampaigns(campData.campaigns || []);
+          setTags(tagData.tags || []);
+          setLinks(linksData.links || []);
+          clearLoadingStarted("dashboard");
+          setInitialLoading(false);
+          return;
         }
 
-        setUser(meData.user);
-        setCampaigns(campData.campaigns || []);
-        setTags(tagData.tags || []);
-        setLinks(linksData.links || []);
-        clearLoadingStarted("dashboard");
-        setInitialLoading(false);
+        // Auth endpoint failed with a non-401 error (e.g. 500)
+        throw new Error("Authentication verification failed.");
       } catch (err) {
         console.error("Dashboard fetch error:", err);
         if (isInitial) {

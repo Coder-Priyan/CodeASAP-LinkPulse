@@ -3,6 +3,7 @@ import { Lilita_One, Nunito, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { ToastContainer } from "@/components/Toast";
 
 const fontDisplay = Lilita_One({
   weight: "400",
@@ -50,6 +51,7 @@ export default function RootLayout({
           {children}
         </main>
         <Footer />
+        <ToastContainer />
       </body>
     </html>
   );

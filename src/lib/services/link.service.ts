@@ -197,7 +197,7 @@ export async function evaluateLinkRules(
     if (!providedPassword) {
       return {
         status: "PASSWORD_REQUIRED",
-        reason: "A password is required to access this destination.",
+        reason: "A passcode is required to access this destination.",
       };
     }
 
@@ -205,7 +205,7 @@ export async function evaluateLinkRules(
     if (!isValid) {
       return {
         status: "INVALID_PASSWORD",
-        reason: "Incorrect password entered.",
+        reason: "Incorrect passcode entered.",
       };
     }
   }
@@ -663,6 +663,26 @@ export async function getAllLinksAdmin(filters: LinkFilters = {}): Promise<LinkW
 }
 
 /**
+ * Counts total links owned by a user matching optional campaign/tag filters.
+ */
+export async function countUserLinks(userId: string, filters: LinkFilters = {}): Promise<number> {
+  const where: Prisma.LinkWhereInput = { userId };
+  if (filters.campaignId) where.campaignId = filters.campaignId;
+  if (filters.tagId) where.tags = { some: { tagId: filters.tagId } };
+  return db.link.count({ where });
+}
+
+/**
+ * Counts total links in the entire system matching optional filters (ADMIN role only).
+ */
+export async function countAllLinksAdmin(filters: LinkFilters = {}): Promise<number> {
+  const where: Prisma.LinkWhereInput = {};
+  if (filters.campaignId) where.campaignId = filters.campaignId;
+  if (filters.tagId) where.tags = { some: { tagId: filters.tagId } };
+  return db.link.count({ where });
+}
+
+/**
  * Update a link's configuration and rules after creation.
  */
 export async function updateLinkRules(
@@ -782,24 +802,27 @@ export async function updateLinkRules(
         throw new LinkServiceError("One or more tags not found or access denied.", "FORBIDDEN", 403);
       }
 
-      await db.linkTag.deleteMany({ where: { linkId } });
       updateData.tags = {
         create: uniqueTagIds.map((tagId) => ({ tagId })),
       };
-    } else {
-      // Explicitly cleared
-      await db.linkTag.deleteMany({ where: { linkId } });
     }
   }
 
-  const updated = await db.link.update({
-    where: { id: linkId },
-    data: updateData,
-    include: {
-      user: { select: { id: true, email: true, name: true, role: true } },
-      campaign: { select: { id: true, name: true } },
-      tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
-    },
+  // Atomically delete previous tags (if updating) and update link within a transaction
+  const updated = await db.$transaction(async (tx) => {
+    if (input.tagIds !== undefined) {
+      await tx.linkTag.deleteMany({ where: { linkId } });
+    }
+
+    return tx.link.update({
+      where: { id: linkId },
+      data: updateData,
+      include: {
+        user: { select: { id: true, email: true, name: true, role: true } },
+        campaign: { select: { id: true, name: true } },
+        tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
+      },
+    });
   });
 
   const state = computeLinkState({

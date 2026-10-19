@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("[VerifyPassword] Error:", error);
     return NextResponse.json(
-      { error: "Internal server error during password verification." },
+      { error: "Internal server error during passcode verification." },
       { status: 500 }
     );
   }

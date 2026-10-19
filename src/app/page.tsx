@@ -18,8 +18,28 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
+
 export default async function HomePage() {
-  const user = await getCurrentUser();
+  let user = null;
+  try {
+    user = await getCurrentUser();
+  } catch (err: unknown) {
+    // Re-throw Next.js internal control-flow signals (dynamic rendering bails, redirects, not-found)
+    if (
+      isDynamicServerError(err) ||
+      (typeof err === "object" &&
+        err !== null &&
+        typeof (err as { digest?: string }).digest === "string" &&
+        ((err as { digest: string }).digest.startsWith("NEXT_") ||
+          (err as { digest: string }).digest === "DYNAMIC_SERVER_USAGE"))
+    ) {
+      throw err;
+    }
+    // Fail-safe: if database is unreachable on public landing page, treat visitor as logged out
+    console.error("[HomePage] Database unreachable for session lookup, treating as logged out:", err);
+    user = null;
+  }
   const sampleShortUrl = buildShortUrl("q3-metrics");
 
   return (
@@ -68,7 +88,7 @@ export default async function HomePage() {
               <span className="simulator-dot simulator-dot-yellow" />
               <span className="simulator-dot simulator-dot-green" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="simulator-badges-wrap flex items-center gap-2" style={{ flexWrap: "wrap" }}>
               <span className="badge badge-paper flex items-center gap-1" style={{ fontSize: "0.75rem", backgroundColor: "var(--color-yellow-light)" }}>
                 <Sparkles size={12} strokeWidth={2.5} />
                 <span>Interactive Demo (Sample Data)</span>
@@ -86,7 +106,7 @@ export default async function HomePage() {
                 Sample Short Link
               </div>
               <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
-                <code className="code-badge" style={{ fontSize: "1.05rem" }}>
+                <code className="code-badge" style={{ fontSize: "1.05rem", wordBreak: "break-all", maxWidth: "100%" }}>
                   {sampleShortUrl}
                 </code>
                 <span className="badge badge-active flex items-center gap-1">
@@ -108,6 +128,8 @@ export default async function HomePage() {
               <span
                 className="btn btn-secondary btn-sm"
                 style={{ pointerEvents: "none", cursor: "default" }}
+                aria-hidden="true"
+                tabIndex={-1}
               >
                 <Copy size={14} />
                 <span>Copy</span>
@@ -115,6 +137,8 @@ export default async function HomePage() {
               <span
                 className="btn btn-secondary btn-sm"
                 style={{ pointerEvents: "none", cursor: "default" }}
+                aria-hidden="true"
+                tabIndex={-1}
               >
                 <ExternalLink size={14} />
               </span>

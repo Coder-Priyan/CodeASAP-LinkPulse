@@ -119,7 +119,7 @@ export async function getAnalyticsReport(
     activeLinksCount,
     totalClicks,
     uniqueVisitorGroups,
-    clickTimestamps,
+    dailyClickAggregates,
     sourceRows,
     deviceRows,
     browserRows,
@@ -144,11 +144,33 @@ export async function getAnalyticsReport(
         visitorHash: { not: null },
       },
     }),
-    db.clickEvent.findMany({
-      where: clickWhere,
-      select: { timestamp: true },
-      orderBy: { timestamp: "asc" },
-    }),
+    (() => {
+      const conditions: Prisma.Sql[] = [];
+      if (!isPlatformScope) {
+        conditions.push(Prisma.sql`l."userId" = ${userId}`);
+      }
+      if (options.campaignId) {
+        conditions.push(Prisma.sql`l."campaignId" = ${options.campaignId}`);
+      }
+      if (since) {
+        conditions.push(Prisma.sql`ce."timestamp" >= ${since}`);
+      }
+      const whereSql =
+        conditions.length > 0
+          ? Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`
+          : Prisma.empty;
+
+      return db.$queryRaw<{ date: string; clicks: number | bigint }[]>`
+        SELECT 
+          to_char(ce."timestamp" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+          COUNT(*)::int AS clicks
+        FROM "ClickEvent" ce
+        JOIN "Link" l ON ce."linkId" = l."id"
+        ${whereSql}
+        GROUP BY 1
+        ORDER BY 1 ASC
+      `;
+    })(),
     db.clickEvent.groupBy({
       by: ["source"],
       where: clickWhere,
@@ -216,10 +238,17 @@ export async function getAnalyticsReport(
 
   const uniqueVisitors = uniqueVisitorGroups.length;
 
-  // 4. Map Clicks Over Time (generate daily sequence and map counts)
+  // 4. Map Clicks Over Time (generate zero-filled daily sequence and map SQL aggregates)
   const dailyMap = new Map<string, number>();
-  const startDate = since || (clickTimestamps.length > 0 ? clickTimestamps[0].timestamp : new Date(now.getTime() - 7 * 86400000));
-  const daysDiff = Math.max(1, Math.min(60, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 3600 * 24))));
+  const startDate =
+    since ||
+    (dailyClickAggregates.length > 0
+      ? new Date(dailyClickAggregates[0].date + "T00:00:00Z")
+      : new Date(now.getTime() - 7 * 86400000));
+  const daysDiff = Math.max(
+    1,
+    Math.min(60, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 3600 * 24)))
+  );
 
   for (let i = daysDiff - 1; i >= 0; i--) {
     const d = new Date(now.getTime() - i * 86400000);
@@ -227,13 +256,8 @@ export async function getAnalyticsReport(
     dailyMap.set(key, 0);
   }
 
-  for (const c of clickTimestamps) {
-    const key = c.timestamp.toISOString().slice(0, 10);
-    if (dailyMap.has(key)) {
-      dailyMap.set(key, (dailyMap.get(key) || 0) + 1);
-    } else {
-      dailyMap.set(key, 1);
-    }
+  for (const row of dailyClickAggregates) {
+    dailyMap.set(row.date, Number(row.clicks));
   }
 
   const clicksOverTime: DayClickStat[] = Array.from(dailyMap.entries()).map(

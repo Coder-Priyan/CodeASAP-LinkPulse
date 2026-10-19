@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LinksTable, LinkItem } from "@/components/LinksTable";
 import { LoadingScreen, clearLoadingStarted } from "@/components/LoadingScreen";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { toast } from "@/components/Toast";
 import {
   Shield,
   Globe,
@@ -53,6 +55,11 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  // Pagination state for global link directory
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalRegistryLinks, setTotalRegistryLinks] = useState(0);
+
   // New blocked domain form state
   const [newDomain, setNewDomain] = useState("");
   const [newReason, setNewReason] = useState("");
@@ -61,22 +68,30 @@ export default function AdminPage() {
   const [domainSuccess, setDomainSuccess] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [domainSearchQuery, setDomainSearchQuery] = useState("");
+  const [unblockConfirmItem, setUnblockConfirmItem] = useState<BlockedDomainItem | null>(null);
 
   useEffect(() => {
     document.title = "Admin Console | LinkPulse";
   }, []);
 
   const fetchAdminData = useCallback(
-    async (isInitial = false) => {
+    async (isInitial = false, pageToFetch = currentPage) => {
       const startTime = Date.now();
       try {
         setFetchError(null);
+        const offset = (pageToFetch - 1) * pageSize;
         // Parallelize all admin resources concurrently
         const [meRes, linksRes, blockedRes] = await Promise.all([
           fetch("/api/auth/me"),
-          fetch("/api/links?scope=all"),
+          fetch(`/api/links?scope=all&limit=${pageSize}&offset=${offset}`),
           fetch("/api/admin/blocked-domains"),
         ]);
+
+        // Check for unauthenticated state first
+        if (meRes.status === 401 || linksRes.status === 401 || blockedRes.status === 401) {
+          router.push("/login");
+          return;
+        }
 
         const [meData, linksData, blockedData] = await Promise.all([
           meRes.json(),
@@ -110,6 +125,7 @@ export default function AdminPage() {
 
         setUser(meData.user);
         setLinks(linksData.links || []);
+        setTotalRegistryLinks(linksData.total !== undefined ? linksData.total : linksData.links?.length || 0);
         const domainList = blockedData.blockedDomains || blockedData.domains || [];
         setBlockedDomains(domainList);
         clearLoadingStarted("admin");
@@ -123,16 +139,20 @@ export default function AdminPage() {
         setRefreshing(false);
       }
     },
-    [router]
+    [router, currentPage, pageSize]
   );
 
   useEffect(() => {
-    fetchAdminData(true);
-  }, [fetchAdminData]);
+    fetchAdminData(true, currentPage);
+  }, [fetchAdminData, currentPage]);
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
 
   const handleManualRefresh = () => {
     setRefreshing(true);
-    fetchAdminData();
+    fetchAdminData(false, currentPage);
   };
 
   const handleAddBlockedDomain = async (e: React.FormEvent) => {
@@ -193,20 +213,18 @@ export default function AdminPage() {
     }
   };
 
-  const handleRemoveBlockedDomain = async (id: string, domain: string) => {
-    if (!confirm(`Are you sure you want to unblock "${domain}"? Links targeting this domain will resume redirecting.`)) {
-      return;
-    }
+  const promptRemoveBlockedDomain = (item: BlockedDomainItem) => {
+    setUnblockConfirmItem(item);
+  };
 
-    const itemToDelete = blockedDomains.find((d) => d.id === id);
-    if (!itemToDelete) return;
+  const executeRemoveBlockedDomain = async (itemToDelete: BlockedDomainItem) => {
+    const { id, domain } = itemToDelete;
 
     // Optimistic immediate removal from list (0ms perceived latency)
     setBlockedDomains((prev) => prev.filter((d) => d.id !== id));
     setDeletingId(id);
 
     // Re-activate links that were disabled specifically due to this blocked domain
-    const unblockedHost = domain.toLowerCase();
     setLinks((prev) =>
       prev.map((l) => {
         if (l.disabledReason === `Blocked domain: ${domain}`) {
@@ -229,12 +247,14 @@ export default function AdminPage() {
         // Rollback on failure
         setBlockedDomains((prev) => [itemToDelete, ...prev]);
         const data = await res.json();
-        alert(data.error || "Failed to remove domain from blocklist.");
+        toast.error(data.error || "Failed to remove domain from blocklist.");
+      } else {
+        toast.success(`Domain "${domain}" unblocked.`);
       }
     } catch {
       // Rollback on network error
       setBlockedDomains((prev) => [itemToDelete, ...prev]);
-      alert("Network error while removing blocked domain.");
+      toast.error("Network error while removing blocked domain.");
     } finally {
       setDeletingId(null);
     }
@@ -289,7 +309,7 @@ export default function AdminPage() {
     );
   }
 
-  const totalLinks = links.length;
+  const totalLinks = totalRegistryLinks || links.length;
   const totalClicks = links.reduce((sum, l) => sum + l.clicksCount, 0);
   const activeLinks = links.filter((l) => l.state === "active").length;
   const inactiveOrRestricted = totalLinks - activeLinks;
@@ -561,7 +581,7 @@ export default function AdminPage() {
                         <td style={{ textAlign: "right" }}>
                           <button
                             type="button"
-                            onClick={() => handleRemoveBlockedDomain(item.id, item.domain)}
+                            onClick={() => promptRemoveBlockedDomain(item)}
                             disabled={deletingId === item.id}
                             className="btn btn-danger btn-sm"
                             title="Remove domain from blocklist"
@@ -596,8 +616,36 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <LinksTable links={links} isAdminView={true} onRefresh={fetchAdminData} />
+        <LinksTable
+          links={links}
+          isAdminView={true}
+          onRefresh={() => fetchAdminData(false, currentPage)}
+          loading={refreshing}
+          pagination={{
+            page: currentPage,
+            pageSize,
+            total: totalRegistryLinks,
+            onPageChange: handlePageChange,
+          }}
+        />
       </div>
+
+      {unblockConfirmItem && (
+        <ConfirmDialog
+          isOpen={true}
+          title="Unblock Domain"
+          message={`Are you sure you want to unblock "${unblockConfirmItem.domain}"? Links targeting this domain will resume redirecting.`}
+          confirmLabel="Unblock domain"
+          cancelLabel="Cancel"
+          variant="danger"
+          onConfirm={async () => {
+            const item = unblockConfirmItem;
+            setUnblockConfirmItem(null);
+            await executeRemoveBlockedDomain(item);
+          }}
+          onCancel={() => setUnblockConfirmItem(null)}
+        />
+      )}
     </div>
   );
 }

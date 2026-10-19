@@ -4,6 +4,8 @@ import {
   createLink,
   getUserLinks,
   getAllLinksAdmin,
+  countUserLinks,
+  countAllLinksAdmin,
   LinkServiceError,
 } from "@/lib/services/link.service";
 import { RateLimitError } from "@/lib/services/rate-limiter";
@@ -19,7 +21,9 @@ export async function GET(request: NextRequest) {
     const limitParam = searchParams.get("limit");
     const offsetParam = searchParams.get("offset");
 
-    let limit: number | undefined = undefined;
+    const DEFAULT_PAGE_SIZE = 50;
+    let limit = DEFAULT_PAGE_SIZE;
+
     if (limitParam !== null) {
       const parsed = Number(limitParam);
       if (!Number.isInteger(parsed) || parsed < 1 || isNaN(parsed)) {
@@ -44,7 +48,7 @@ export async function GET(request: NextRequest) {
       limit = parsed;
     }
 
-    let offset: number | undefined = undefined;
+    let offset = 0;
     if (offsetParam !== null) {
       const parsed = Number(offsetParam);
       if (!Number.isInteger(parsed) || parsed < 0 || isNaN(parsed)) {
@@ -59,12 +63,32 @@ export async function GET(request: NextRequest) {
     const filters = { campaignId, tagId, limit, offset };
 
     if (scope === "all" && user.role === Role.ADMIN) {
-      const allLinks = await getAllLinksAdmin(filters);
-      return NextResponse.json({ links: allLinks });
+      const [allLinks, total] = await Promise.all([
+        getAllLinksAdmin(filters),
+        countAllLinksAdmin(filters),
+      ]);
+      return NextResponse.json({
+        links: allLinks,
+        total,
+        limit,
+        offset,
+        page: Math.floor(offset / limit) + 1,
+        hasMore: offset + allLinks.length < total,
+      });
     }
 
-    const userLinks = await getUserLinks(user.userId, filters);
-    return NextResponse.json({ links: userLinks });
+    const [userLinks, total] = await Promise.all([
+      getUserLinks(user.userId, filters),
+      countUserLinks(user.userId, filters),
+    ]);
+    return NextResponse.json({
+      links: userLinks,
+      total,
+      limit,
+      offset,
+      page: Math.floor(offset / limit) + 1,
+      hasMore: offset + userLinks.length < total,
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

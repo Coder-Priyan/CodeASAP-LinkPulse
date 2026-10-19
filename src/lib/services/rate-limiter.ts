@@ -113,3 +113,50 @@ export function resetLoginRateLimitForTesting(identifier?: string): void {
   }
 }
 
+// Registration rate limiting: 5 attempts per hour per IP/identifier to protect against mass account creation and bcrypt DoS
+const MAX_REGISTER_ATTEMPTS_PER_WINDOW = 5;
+const REGISTER_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+const registerTimestamps = new Map<string, number[]>();
+
+function pruneStaleRegisterEntries(windowStart: number): void {
+  for (const [key, times] of registerTimestamps.entries()) {
+    const valid = times.filter((t) => t > windowStart);
+    if (valid.length === 0) {
+      registerTimestamps.delete(key);
+    } else if (valid.length < times.length) {
+      registerTimestamps.set(key, valid);
+    }
+  }
+}
+
+export async function checkRegisterRateLimit(identifier: string): Promise<void> {
+  const now = Date.now();
+  const windowStart = now - REGISTER_WINDOW_MS;
+
+  // Prune stale entries to prevent unbounded Map growth
+  pruneStaleRegisterEntries(windowStart);
+
+  const timestamps = registerTimestamps.get(identifier) || [];
+
+  if (timestamps.length >= MAX_REGISTER_ATTEMPTS_PER_WINDOW) {
+    const oldest = timestamps[0];
+    const retryAfter = Math.ceil((oldest + REGISTER_WINDOW_MS - now) / 1000);
+    throw new RateLimitError(
+      `Too many registration attempts. Please wait ${retryAfter > 0 ? retryAfter : 3600} seconds before trying again.`,
+      retryAfter > 0 ? retryAfter : 3600
+    );
+  }
+
+  timestamps.push(now);
+  registerTimestamps.set(identifier, timestamps);
+}
+
+export function resetRegisterRateLimitForTesting(identifier?: string): void {
+  if (identifier) {
+    registerTimestamps.delete(identifier);
+  } else {
+    registerTimestamps.clear();
+  }
+}
+
