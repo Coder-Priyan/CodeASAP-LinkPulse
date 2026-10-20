@@ -8,7 +8,7 @@
 **Members:**
 - `Sandeep Singh Mehta` (`Sandeep123-sys`)
 - `Abhishek Dhapola` (`abdhapola20`)
-- `Aditya Mehra` (`<GITHUB_USERNAME>`)
+- `Aditya Mehra` (`ADITYAMEHRA247`)
 - `Deepak Kumar Kabi` (`deepakkabi`)
 - `Priyanshu Dangi` (`Coder-Priyan`)
 
